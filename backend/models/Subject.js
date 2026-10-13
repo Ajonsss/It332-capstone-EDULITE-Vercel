@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import academicPlugin from "./academicPlugin.js";
 
 const subjectSchema =
   new mongoose.Schema(
@@ -61,6 +62,8 @@ subjectSchema.index(
       "unique_subject_name_per_owner",
   },
 );
+
+subjectSchema.plugin(academicPlugin, { scopeSchoolYear: false });
 
 const Subject =
   mongoose.models.Subject ||

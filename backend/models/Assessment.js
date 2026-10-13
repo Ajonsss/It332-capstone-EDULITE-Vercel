@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import academicPlugin from "./academicPlugin.js";
 
 /*
   ============================================================
@@ -255,6 +256,13 @@ const assessmentSchema =
         },
       },
 
+      budgetOfWork: {
+        type: String,
+        trim: true,
+        default: "",
+        maxlength: [5000, "Budget of Work must be at most 5000 characters."],
+      },
+
       subjectId: {
         type:
           mongoose.Schema.Types.ObjectId,
@@ -353,6 +361,8 @@ assessmentSchema.index({
   sequence:
     1,
 });
+
+assessmentSchema.plugin(academicPlugin);
 
 const Assessment =
   mongoose.models.Assessment ||

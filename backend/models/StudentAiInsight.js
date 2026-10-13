@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import academicPlugin from "./academicPlugin.js";
 
 const studentAiInsightSchema =
   new mongoose.Schema(
@@ -167,6 +168,8 @@ studentAiInsightSchema.index(
       "insights_by_owner_and_date",
   },
 );
+
+studentAiInsightSchema.plugin(academicPlugin);
 
 const StudentAiInsight =
   mongoose.models

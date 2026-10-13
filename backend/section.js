@@ -264,7 +264,7 @@ router.delete(
 
           sectionId:
             section._id,
-        });
+        }).setOptions({ acrossSchoolYears: true, includeArchived: true });
 
       if (studentCount > 0) {
         return res.status(409).json({

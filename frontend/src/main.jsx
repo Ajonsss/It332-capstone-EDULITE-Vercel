@@ -2,8 +2,11 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import axios from "axios";
 
+import { initializeTheme } from "./utils/theme";
 import App from "./App.jsx";
 import "./index.css";
+
+initializeTheme();
 
 axios.interceptors.request.use(
   (config) => {
@@ -37,7 +40,7 @@ axios.interceptors.response.use(
       ) ||
       requestUrl.endsWith(
         "/register",
-      );
+      ) || requestUrl.endsWith("/account/reset-password");
 
     if (
       isAuthenticationRequest &&
@@ -73,7 +76,7 @@ axios.interceptors.response.use(
       ) ||
       requestUrl.endsWith(
         "/register",
-      );
+      ) || requestUrl.endsWith("/account/reset-password");
 
     if (
       status === 401 &&

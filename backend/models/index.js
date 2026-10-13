@@ -25,3 +25,7 @@ export {
 export {
   default as StudentAiInsight,
 } from "./StudentAiInsight.js";
+export { default as SchoolYear } from "./SchoolYear.js";
+export { default as Intervention } from "./Intervention.js";
+export { default as AwardCertificate } from "./AwardCertificate.js";
+export { default as AuditEvent } from "./AuditEvent.js";

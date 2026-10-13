@@ -1,0 +1,60 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { JSDOM } from "jsdom";
+import { createServer } from "vite";
+
+test("teacher reviews readiness, finishes a year level, and reopens the saved archive", async (t) => {
+  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: "http://localhost/" });
+  globalThis.window = dom.window; globalThis.document = dom.window.document; globalThis.HTMLElement = dom.window.HTMLElement;
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const React = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const axios = (await import("axios")).default;
+  const vite = await createServer({ server: { middlewareMode: true, ws: false, hmr: false }, appType: "custom" });
+  const { default: YearEndView } = await vite.ssrLoadModule("/src/components/YearEndView.jsx");
+  const ready = { id: "a", name: "Alice", grade: 12, section: "Rose", complete: true, status: "ready", finalAverage: 90, recommendation: "Ready for teacher review: promotion or graduation", failedSubjects: [], pendingSubjects: [], subjects: [{ id: "math", name: "Math", terms: { term1: { termGrade: 90 }, term2: { termGrade: 90 }, term3: { termGrade: 90 } }, final: { finalGrade: 90, isFullyComplete: true }, assessments: [{ assessmentId: "quiz", name: "Fractions quiz", term: 1, score: 9, totalItems: 10, budgetOfWork: "Fractions" }] }] };
+  const pending = { ...ready, id: "b", name: "Bob", complete: false, status: "pending", finalAverage: null, recommendation: "Complete missing year-end results first" };
+  let snapshot;
+  let refreshes = 0;
+  t.mock.method(axios, "get", async (url) => {
+    if (url.endsWith("/school-years")) return { data: { years: [], activeId: null } };
+    if (url.endsWith("/year-end-report")) return { data: [ready, pending] };
+    if (url.endsWith("/student-archives")) return { data: snapshot ? [snapshot] : [] };
+    if (url.endsWith("/student-archives/a")) return { data: snapshot };
+    throw new Error(`Unexpected URL ${url}`);
+  });
+  const posts = [];
+  t.mock.method(axios, "post", async (url, body) => { posts.push({ url, body }); snapshot = { ...ready, schoolYear: body.school_year, outcome: body.outcome, notes: body.notes, archivedAt: new Date().toISOString(), insights: [] }; return { data: { message: "Archived" } }; });
+  const root = createRoot(document.getElementById("root"));
+  t.after(async () => { await React.act(async () => root.unmount()); await vite.close(); dom.window.close(); });
+  await React.act(async () => root.render(React.createElement(YearEndView, { onFinished: async () => { refreshes++; } })));
+  const control = (label) => document.querySelector(`[aria-label="${label}"]`);
+  const click = (label) => React.act(async () => [...document.querySelectorAll("button")].find((button) => button.textContent === label).click());
+  await React.act(async () => control("Review Bob").click());
+  assert.match(document.body.textContent, /cannot be finished yet/);
+  assert.equal(control("Finish school year"), null);
+  await React.act(async () => control("Review Alice").click());
+  await React.act(async () => {
+    const input = control("Finish school year");
+    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set.call(input, "2026–2027");
+    input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    control("Finish outcome").value = "graduated";
+    control("Finish outcome").dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  });
+  await click("Finish & archive Alice");
+  assert.equal(posts.length, 1);
+  assert.ok(posts[0].url.endsWith("/students/a/finish"));
+  assert.equal(posts[0].body.outcome, "graduated");
+  assert.equal(posts[0].body.school_year, "2026–2027");
+  assert.equal(refreshes, 1);
+  assert.equal(control("Review Alice"), null);
+  await click("Archives");
+  await React.act(async () => control("Review Alice").click());
+  assert.match(document.body.textContent, /Graduated/);
+  assert.match(document.body.textContent, /Fractions quiz/);
+  assert.match(document.body.textContent, /Budget of Work: Fractions/);
+  assert.equal(control("Finish school year"), null);
+  // Reopening the same record must not leave the detail in a loading state.
+  await React.act(async () => control("Review Alice").click());
+  assert.doesNotMatch(document.body.textContent, /Loading archived record/);
+});

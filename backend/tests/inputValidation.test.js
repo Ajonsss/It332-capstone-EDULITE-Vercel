@@ -190,7 +190,7 @@ test("actual score endpoint validates the entire batch before saving or clearing
   await once(server, "listening");
   t.after(() => new Promise((resolve) => { server.close(resolve); server.closeAllConnections(); }));
   const url = `http://127.0.0.1:${server.address().port}/students/${validId}/assessment-scores`;
-  const token = jwt.sign({ sub: validId }, testSecret);
+  const token = jwt.sign({ sub: validId }, testSecret, { issuer: "edulite-api", audience: "edulite-frontend" });
   const secondId = "507f1f77bcf86cd799439012";
   const send = (scores) => fetch(url, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ scores }) });
   assert.equal((await send([{ assessment_id: validId, score: null }, { assessment_id: secondId, score: 11 }])).status, 400);
@@ -199,4 +199,16 @@ test("actual score endpoint validates the entire batch before saving or clearing
   assert.equal(writes.length, 2);
   assert.ok(writes[0].delete);
   assert.equal(writes[1].update.$set.score, 0);
+});
+
+
+test("Budget of Work accepts multiline curriculum text and rejects invalid payloads", async (t) => {
+  const api = await apiFor(t);
+  const budget = "Week 1: Fractions\nCompetency: Add unlike fractions.\nTime: 2 lessons.";
+  assert.equal((await api.send("/assessments", { ...assessment, budget_of_work: budget })).status, 204);
+  for (const value of [42, {}, [], "x".repeat(5001), "Topic\u0000hidden"]) {
+    const response = await api.send("/assessments", { ...assessment, budget_of_work: value });
+    assert.equal(response.status, 400);
+    assert.ok(response.body.fields.budget_of_work);
+  }
 });

@@ -6,6 +6,8 @@ import Section from "./models/Section.js";
 import Subject from "./models/Subject.js";
 import Assessment from "./models/Assessment.js";
 import AssessmentScore from "./models/AssessmentScore.js";
+import Intervention from "./models/Intervention.js";
+import AwardCertificate from "./models/AwardCertificate.js";
 import StudentAiInsight from "./models/StudentAiInsight.js";
 import { parseWholeNumber } from "../shared/inputValidation.mjs";
 
@@ -702,7 +704,12 @@ router.delete(
         });
       }
 
+      const nextEnrollment = await Student.exists({ ownerId, previousEnrollmentId: student._id }).setOptions({ acrossSchoolYears: true, includeArchived: true });
+      if (nextEnrollment) return res.status(409).json({ message: "This student has a next-year enrollment. Archive the original year record instead of deleting its enrollment history." });
+      // Issued certificates retain their historical recipient snapshot after a student is deleted.
+      await AwardCertificate.updateMany({ ownerId, studentId: student._id }, { $set: { studentId: null } });
       await Promise.all([
+        Intervention.deleteMany({ ownerId, studentId: student._id }),
         AssessmentScore.deleteMany({
           ownerId,
           studentId:

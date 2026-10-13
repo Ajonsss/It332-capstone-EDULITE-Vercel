@@ -2,6 +2,7 @@ import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
+import { limitAuthentication } from "./services/accountSecurity.js";
 import User from "./models/User.js";
 import {
   requireAuth,
@@ -35,13 +36,14 @@ function createToken(user) {
   return jwt.sign(
     {
       name: user.name,
+      sessionVersion: user.sessionVersion ?? 0,
     },
     jwtSecret,
     {
       subject:
         user._id.toString(),
 
-      expiresIn: "7d",
+      expiresIn: "8h",
 
       issuer: "edulite-api",
 
@@ -64,6 +66,7 @@ function formatUser(user) {
 
 router.post(
   "/register",
+  limitAuthentication,
   async (req, res) => {
     const name = normalizeName(
       req.body.name,
@@ -155,6 +158,7 @@ router.post(
 
 router.post(
   "/login",
+  limitAuthentication,
   async (req, res) => {
     const name = normalizeName(
       req.body.name,
@@ -187,6 +191,8 @@ router.post(
         });
       }
 
+      if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) return res.status(429).json({ message: "Too many failed attempts. Try again in 15 minutes or use your recovery code." });
+
       const match =
         await bcrypt.compare(
           password,
@@ -194,12 +200,15 @@ router.post(
         );
 
       if (!match) {
+        const failures = (user.loginFailures ?? 0) + 1;
+        await User.updateOne({ _id: user._id }, { $set: { loginFailures: failures, lockedUntil: failures >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null } });
         return res.status(400).json({
           message:
             "Invalid name or password",
         });
       }
 
+      await User.updateOne({ _id: user._id }, { $set: { loginFailures: 0, lockedUntil: null } });
       const token =
         createToken(user);
 

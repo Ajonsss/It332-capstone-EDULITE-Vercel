@@ -10,6 +10,13 @@ import {
   disconnectMongoDatabase,
 } from "./database/mongo.js";
 
+import SchoolYear from "./models/SchoolYear.js";
+import Intervention from "./models/Intervention.js";
+import AwardCertificate from "./models/AwardCertificate.js";
+import AuditEvent from "./models/AuditEvent.js";
+import accountRoutes from "./accountRoutes.js";
+import teacherToolsRoutes from "./teacherTools.js";
+import studentLifecycleRoutes from "./studentLifecycle.js";
 import loginRoutes from "./login.js";
 import sectionRoutes from "./section.js";
 import studentRoutes from "./student.js";
@@ -25,7 +32,7 @@ const PORT =
   Number(process.env.PORT) || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "25mb" }));
 app.use(validateRequestInputs);
 
 app.get("/", (req, res) => {
@@ -44,8 +51,11 @@ app.get("/", (req, res) => {
   Those duplicate routes will be removed
   when student.js is converted.
 */
+app.use(accountRoutes);
+app.use(teacherToolsRoutes);
 app.use(loginRoutes);
 app.use(sectionRoutes);
+app.use(studentLifecycleRoutes);
 app.use(studentRoutes);
 app.use(studentImportRoutes);
 app.use(subjectRoutes);
@@ -84,6 +94,7 @@ app.use(
 async function startServer() {
   try {
     await connectMongoDatabase();
+    await Promise.all([SchoolYear, Intervention, AwardCertificate, AuditEvent].map((Model) => Model.createIndexes()));
 
     app.listen(PORT, () => {
       console.log(

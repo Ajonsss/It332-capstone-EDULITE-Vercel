@@ -68,51 +68,51 @@ export default function StudentImport({ subjects, onImported }) {
   };
 
   return (
-    <section className="rounded-[24px] border border-[#E3E9EE] bg-white p-6 sm:p-7">
+    <section className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-6 sm:p-7">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-lg font-bold text-[#25313C]">Import students from Excel</h3>
-          <p className="mt-1 text-sm text-[#71808D]">Register a class at once using grade level, section, and student names.</p>
+          <h3 className="text-lg font-bold text-[var(--ed-color-25313c)]">Import students from Excel</h3>
+          <p className="mt-1 text-sm text-[var(--ed-color-71808d)]">Register a class at once using grade level, section, and student names.</p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-3">
-          <a href="/templates/student-import-template.xlsx" download className="rounded-[12px] border border-[#D8E1E7] px-4 py-2.5 text-sm font-semibold text-[#25313C] hover:bg-[#F5F8FA]">Download template</a>
-          <button type="button" disabled={importing} onClick={() => setExpanded(!expanded)} aria-expanded={expanded} aria-controls="student-import-form" className="rounded-[12px] bg-[#36A9E1] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#168CC8] disabled:opacity-50">{expanded ? "Close import" : "Upload Excel file"}</button>
+          <a href="/templates/student-import-template.xlsx" download className="rounded-[12px] border border-[var(--ed-color-d8e1e7)] px-4 py-2.5 text-sm font-semibold text-[var(--ed-color-25313c)] hover:bg-[var(--ed-color-f5f8fa)]">Download template</a>
+          <button type="button" disabled={importing} onClick={() => setExpanded(!expanded)} aria-expanded={expanded} aria-controls="student-import-form" className="rounded-[12px] bg-[var(--ed-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--ed-primary-hover)] disabled:opacity-50">{expanded ? "Close import" : "Upload Excel file"}</button>
         </div>
       </div>
       {expanded && (
-        <form id="student-import-form" onSubmit={handleImport} className="mt-6 space-y-5 border-t border-[#E3E9EE] pt-5">
-          <ol className="list-decimal space-y-1 pl-5 text-sm text-[#71808D]">
+        <form id="student-import-form" onSubmit={handleImport} className="mt-6 space-y-5 border-t border-[var(--ed-color-e3e9ee)] pt-5">
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-[var(--ed-color-71808d)]">
             <li>Download the template and paste one student per row in the Students worksheet.</li>
             <li>Fill Grade Level with a whole number (for example, 7), Section, and Student Name on every row.</li>
             <li>Save as .xlsx, choose the subjects for this class, and import.</li>
           </ol>
-          <p className="text-sm text-[#71808D]">Up to 1,000 students and 5 MB per file. Missing sections are created automatically. Matching names in the same grade and section are skipped. Existing subject enrollments stay as they are.</p>
+          <p className="text-sm text-[var(--ed-color-71808d)]">Up to 1,000 students and 5 MB per file. Missing sections are created automatically. Matching names in the same grade and section are skipped. Existing subject enrollments stay as they are.</p>
           <div>
-            <label htmlFor="student-import-file" className="mb-2 block text-sm font-semibold text-[#25313C]">Excel file</label>
-            <input ref={fileInputRef} id="student-import-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={selectFile} disabled={importing} className="block w-full rounded-[12px] border border-[#D8E1E7] p-3 text-sm text-[#25313C] file:mr-4 file:rounded-lg file:border-0 file:bg-[#EDF7FC] file:px-3 file:py-2 file:font-semibold file:text-[#168CC8]" />
+            <label htmlFor="student-import-file" className="mb-2 block text-sm font-semibold text-[var(--ed-color-25313c)]">Excel file</label>
+            <input ref={fileInputRef} id="student-import-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={selectFile} disabled={importing} className="block w-full rounded-[12px] border border-[var(--ed-color-d8e1e7)] p-3 text-sm text-[var(--ed-color-25313c)] file:mr-4 file:rounded-lg file:border-0 file:bg-[var(--ed-color-edf7fc)] file:px-3 file:py-2 file:font-semibold file:text-[var(--ed-color-168cc8)]" />
           </div>
           <fieldset disabled={importing}>
-            <legend className="text-sm font-semibold text-[#25313C]">Subjects for all imported students</legend>
-            <p className="mt-1 text-sm text-[#71808D]">Choose at least one subject. You can edit each student's enrollment later.</p>
+            <legend className="text-sm font-semibold text-[var(--ed-color-25313c)]">Subjects for all imported students</legend>
+            <p className="mt-1 text-sm text-[var(--ed-color-71808d)]">Choose at least one subject. You can edit each student's enrollment later.</p>
             <div className="mt-3 flex flex-wrap gap-3">
               {subjects.map((subject) => (
-                <label key={subject.id} className="flex cursor-pointer items-center gap-2 rounded-[12px] border border-[#D8E1E7] px-3 py-2 text-sm text-[#25313C]">
-                  <input type="checkbox" checked={subjectIds.includes(String(subject.id))} onChange={(event) => setSubjectIds((current) => event.target.checked ? [...current, String(subject.id)] : current.filter((id) => id !== String(subject.id)))} className="accent-[#36A9E1]" />
+                <label key={subject.id} className="flex cursor-pointer items-center gap-2 rounded-[12px] border border-[var(--ed-color-d8e1e7)] px-3 py-2 text-sm text-[var(--ed-color-25313c)]">
+                  <input type="checkbox" checked={subjectIds.includes(String(subject.id))} onChange={(event) => setSubjectIds((current) => event.target.checked ? [...current, String(subject.id)] : current.filter((id) => id !== String(subject.id)))} className="accent-[var(--ed-primary)]" />
                   {subject.name}
                 </label>
               ))}
             </div>
-            {!subjects.length && <p className="mt-3 text-sm text-[#B45309]">Add a subject from the Subjects page before importing students.</p>}
+            {!subjects.length && <p className="mt-3 text-sm text-[var(--ed-color-b45309)]">Add a subject from the Subjects page before importing students.</p>}
           </fieldset>
-          {error && <p role="alert" className="rounded-[12px] bg-[#FFF1F2] px-4 py-3 text-sm text-[#BE123C]">{error}</p>}
+          {error && <p role="alert" className="rounded-[12px] bg-[var(--ed-color-fff1f2)] px-4 py-3 text-sm text-[var(--ed-color-be123c)]">{error}</p>}
           {result && (
             <div aria-live="polite" className="space-y-3 text-sm">
-              {typeof result.imported_count === "number" && <p className="rounded-[12px] bg-[#EDF7FC] px-4 py-3 font-semibold text-[#168CC8]">{result.message}</p>}
+              {typeof result.imported_count === "number" && <p className="rounded-[12px] bg-[var(--ed-color-edf7fc)] px-4 py-3 font-semibold text-[var(--ed-color-168cc8)]">{result.message}</p>}
               {Boolean(result.issues?.length || result.skipped?.length) && (
-                <div className="max-h-64 overflow-auto rounded-[12px] border border-[#E3E9EE]">
+                <div className="max-h-64 overflow-auto rounded-[12px] border border-[var(--ed-color-e3e9ee)]">
                   <table className="w-full text-left">
-                    <thead className="bg-[#F5F8FA] text-[#25313C]"><tr><th scope="col" className="px-4 py-2">Excel row</th><th scope="col" className="px-4 py-2">Result</th></tr></thead>
-                    <tbody className="divide-y divide-[#E3E9EE] text-[#71808D]">
+                    <thead className="bg-[var(--ed-color-f5f8fa)] text-[var(--ed-color-25313c)]"><tr><th scope="col" className="px-4 py-2">Excel row</th><th scope="col" className="px-4 py-2">Result</th></tr></thead>
+                    <tbody className="divide-y divide-[var(--ed-color-e3e9ee)] text-[var(--ed-color-71808d)]">
                       {[...(result.issues ?? []), ...(result.skipped ?? [])].map((issue) => <tr key={issue.row}><td className="px-4 py-2">{issue.row}</td><td className="px-4 py-2">{issue.name ? `${issue.name}: ` : ""}{issue.message}</td></tr>)}
                     </tbody>
                   </table>
@@ -120,7 +120,7 @@ export default function StudentImport({ subjects, onImported }) {
               )}
             </div>
           )}
-          <button type="submit" disabled={importing || !file || !subjectIds.length} className="rounded-[12px] bg-[#36A9E1] px-5 py-3 text-sm font-semibold text-white hover:bg-[#168CC8] disabled:cursor-not-allowed disabled:opacity-50">{importing ? "Importing students..." : "Import students"}</button>
+          <button type="submit" disabled={importing || !file || !subjectIds.length} className="rounded-[12px] bg-[var(--ed-primary)] px-5 py-3 text-sm font-semibold text-white hover:bg-[var(--ed-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50">{importing ? "Importing students..." : "Import students"}</button>
         </form>
       )}
     </section>

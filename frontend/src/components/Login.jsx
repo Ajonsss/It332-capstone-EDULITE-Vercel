@@ -1,3 +1,4 @@
+import PasswordRecovery from "./PasswordRecovery";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -10,6 +11,7 @@ const APPLE_FONT =
   '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
 
 export default function Login() {
+  const [showRecovery, setShowRecovery] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -21,12 +23,7 @@ export default function Login() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!error) {
-      setErrorVisible(false);
-      return undefined;
-    }
-
-    setErrorVisible(true);
+    if (!error) return undefined;
 
     const hideTimer = window.setTimeout(() => {
       setErrorVisible(false);
@@ -46,6 +43,7 @@ export default function Login() {
     setError("");
 
     window.requestAnimationFrame(() => {
+      setErrorVisible(true);
       setError(message);
     });
   };
@@ -147,7 +145,7 @@ export default function Login() {
 
   return (
     <div
-      className="edulite-login min-h-screen bg-white text-[#1C1C1E]"
+      className="edulite-login min-h-screen bg-[var(--ed-surface)] text-[var(--ed-color-1c1c1e)]"
       style={{
         fontFamily: APPLE_FONT,
       }}
@@ -158,7 +156,7 @@ export default function Login() {
         }
 
         .edulite-login {
-          color-scheme: light;
+          color-scheme: inherit;
           overflow-x: hidden;
         }
 
@@ -280,7 +278,7 @@ export default function Login() {
 
       {error && (
         <div
-          className={`login-toast fixed right-4 top-4 z-50 w-[calc(100%-2rem)] max-w-[380px] rounded-[18px] border border-black/5 bg-white/90 p-4 shadow-[0_18px_50px_rgba(31,41,55,0.16)] backdrop-blur-[24px] sm:right-6 sm:top-6 ${
+          className={`login-toast fixed right-4 top-4 z-50 w-[calc(100%-2rem)] max-w-[380px] rounded-[18px] border border-black/5 bg-[var(--ed-surface)]/90 p-4 shadow-[0_18px_50px_rgba(31,41,55,0.16)] backdrop-blur-[24px] sm:right-6 sm:top-6 ${
             errorVisible
               ? "is-visible"
               : ""
@@ -289,16 +287,16 @@ export default function Login() {
           aria-live="assertive"
         >
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FF3B30] text-sm font-bold text-white">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--ed-color-ff3b30)] text-sm font-bold text-white">
               !
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-[#1C1C1E]">
+              <p className="text-sm font-semibold text-[var(--ed-color-1c1c1e)]">
                 EduLITE
               </p>
 
-              <p className="mt-0.5 text-sm leading-5 text-[#636366]">
+              <p className="mt-0.5 text-sm leading-5 text-[var(--ed-color-636366)]">
                 {error}
               </p>
             </div>
@@ -308,7 +306,7 @@ export default function Login() {
               onClick={
                 dismissError
               }
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg leading-none text-[#8E8E93] hover:bg-[#F2F2F7] hover:text-[#1C1C1E]"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg leading-none text-[var(--ed-color-8e8e93)] hover:bg-[var(--ed-color-f2f2f7)] hover:text-[var(--ed-color-1c1c1e)]"
               aria-label="Dismiss error"
             >
               ×
@@ -320,14 +318,14 @@ export default function Login() {
       <main className="login-page-enter relative min-h-screen">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute right-[-180px] top-[-220px] h-[520px] w-[520px] rounded-full bg-[#0091FF]/8 blur-3xl"
+          className="pointer-events-none absolute right-[-180px] top-[-220px] h-[520px] w-[520px] rounded-full bg-[#0091ff]/8 blur-3xl"
         />
 
         <div className="mx-auto grid min-h-screen w-full max-w-[1500px] grid-cols-1 lg:grid-cols-[1.08fr_0.92fr]">
           {/* LEFT SIDE */}
           <section className="relative flex min-h-[44vh] flex-col justify-between px-6 pb-10 pt-7 sm:px-10 sm:pb-14 sm:pt-10 lg:min-h-screen lg:px-16 lg:py-14 xl:px-24">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-[14px] border border-[#E5E5EA] bg-white">
+              <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-[14px] border border-[var(--ed-color-e5e5ea)] bg-[var(--ed-surface)]">
                 <img
                   src="/logo.png"
                   alt="EduLITE logo"
@@ -336,22 +334,22 @@ export default function Login() {
               </div>
 
               <div>
-                <p className="text-sm font-bold tracking-tight text-[#36454F]">
+                <p className="text-sm font-bold tracking-tight text-[var(--ed-color-36454f)]">
                   EduLITE
                 </p>
 
-                <p className="text-[11px] text-[#8E8E93]">
+                <p className="text-[11px] text-[var(--ed-color-8e8e93)]">
                   Teacher Workspace
                 </p>
               </div>
             </div>
 
             <div className="max-w-[720px] py-12 lg:py-0">
-              <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[#0091FF]">
+              <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[var(--ed-color-0091ff)]">
                 Student Learning Workspace
               </p>
 
-              <h1 className="mt-5 text-[clamp(3.4rem,7vw,7.5rem)] font-bold leading-[0.84] tracking-[-0.065em] text-[#0091FF]">
+              <h1 className="mt-5 text-[clamp(3.4rem,7vw,7.5rem)] font-bold leading-[0.84] tracking-[-0.065em] text-[var(--ed-color-0091ff)]">
                 EduLITE:
 
                 <span className="mt-2 block text-[#3AAAE8]">
@@ -361,7 +359,7 @@ export default function Login() {
                 </span>
               </h1>
 
-              <p className="mt-7 max-w-lg text-base leading-7 text-[#636366] sm:text-lg sm:leading-8">
+              <p className="mt-7 max-w-lg text-base leading-7 text-[var(--ed-color-636366)] sm:text-lg sm:leading-8">
                 A focused workspace for
                 student records,
                 assessment results,
@@ -370,7 +368,7 @@ export default function Login() {
               </p>
             </div>
 
-            <p className="hidden max-w-md text-xs leading-5 text-[#A1A1A6] lg:block">
+            <p className="hidden max-w-md text-xs leading-5 text-[var(--ed-color-a1a1a6)] lg:block">
               Built for clear academic
               records and teacher-guided
               decisions.
@@ -378,29 +376,29 @@ export default function Login() {
           </section>
 
           {/* RIGHT SIDE */}
-          <section className="flex items-center border-t border-[#ECEFF2] bg-[#FAFBFC] px-6 py-10 sm:px-10 lg:min-h-screen lg:border-l lg:border-t-0 lg:px-14 xl:px-20">
+          <section className="flex items-center border-t border-[var(--ed-color-eceff2)] bg-[var(--ed-color-fafbfc)] px-6 py-10 sm:px-10 lg:min-h-screen lg:border-l lg:border-t-0 lg:px-14 xl:px-20">
             <div className="login-form-enter mx-auto w-full max-w-[460px]">
               <div className="mb-10">
-                <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#0091FF]">
+                <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-color-0091ff)]">
                   {isLoginMode
                     ? "Welcome Back"
                     : "Create Account"}
                 </p>
 
-                <h2 className="mt-3 text-4xl font-bold tracking-[-0.04em] text-[#36454F] sm:text-5xl">
+                <h2 className="mt-3 text-4xl font-bold tracking-[-0.04em] text-[var(--ed-color-36454f)] sm:text-5xl">
                   {isLoginMode
                     ? "Sign in."
                     : "Get started."}
                 </h2>
 
-                <p className="mt-3 max-w-md text-sm leading-6 text-[#7A7A7F]">
+                <p className="mt-3 max-w-md text-sm leading-6 text-[var(--ed-color-7a7a7f)]">
                   {isLoginMode
                     ? "Enter your EduLITE account details to continue."
                     : "Create an account to begin using the EduLITE workspace."}
                 </p>
               </div>
 
-              <div className="mb-7 inline-flex rounded-[13px] bg-[#ECEFF2] p-1">
+              <div className="mb-7 inline-flex rounded-[13px] bg-[var(--ed-color-eceff2)] p-1">
                 <ModeButton
                   active={
                     isLoginMode
@@ -437,7 +435,7 @@ export default function Login() {
                 className="space-y-5"
               >
                 <label className="block">
-                  <span className="mb-2 block text-sm font-semibold text-[#3A3A3C]">
+                  <span className="mb-2 block text-sm font-semibold text-[var(--ed-color-3a3a3c)]">
                     Username
                   </span>
 
@@ -459,13 +457,13 @@ export default function Login() {
                     disabled={
                       submitting
                     }
-                    className="w-full rounded-[15px] border border-[#D9DDE2] bg-white px-4 py-3.5 text-base text-[#1C1C1E] placeholder-[#A1A1A6] outline-none focus:border-[#0091FF] disabled:cursor-not-allowed disabled:bg-[#F2F2F7]"
+                    className="w-full rounded-[15px] border border-[var(--ed-color-d9dde2)] bg-[var(--ed-surface)] px-4 py-3.5 text-base text-[var(--ed-color-1c1c1e)] placeholder-[var(--ed-color-a1a1a6)] outline-none focus:border-[var(--ed-color-0091ff)] disabled:cursor-not-allowed disabled:bg-[var(--ed-color-f2f2f7)]"
                     required
                   />
                 </label>
 
                 <label className="block">
-                  <span className="mb-2 block text-sm font-semibold text-[#3A3A3C]">
+                  <span className="mb-2 block text-sm font-semibold text-[var(--ed-color-3a3a3c)]">
                     Password
                   </span>
 
@@ -498,7 +496,7 @@ export default function Login() {
                       disabled={
                         submitting
                       }
-                      className="w-full rounded-[15px] border border-[#D9DDE2] bg-white px-4 py-3.5 pr-20 text-base text-[#1C1C1E] placeholder-[#A1A1A6] outline-none focus:border-[#0091FF] disabled:cursor-not-allowed disabled:bg-[#F2F2F7]"
+                      className="w-full rounded-[15px] border border-[var(--ed-color-d9dde2)] bg-[var(--ed-surface)] px-4 py-3.5 pr-20 text-base text-[var(--ed-color-1c1c1e)] placeholder-[var(--ed-color-a1a1a6)] outline-none focus:border-[var(--ed-color-0091ff)] disabled:cursor-not-allowed disabled:bg-[var(--ed-color-f2f2f7)]"
                       required
                     />
 
@@ -515,7 +513,7 @@ export default function Login() {
                       disabled={
                         submitting
                       }
-                      className="absolute right-0 top-0 flex h-[54px] items-center px-4 text-xs font-semibold text-[#007AFF] disabled:cursor-not-allowed disabled:text-[#A1A1A6]"
+                      className="absolute right-0 top-0 flex h-[54px] items-center px-4 text-xs font-semibold text-[var(--ed-color-007aff)] disabled:cursor-not-allowed disabled:text-[var(--ed-color-a1a1a6)]"
                       aria-label={
                         showPassword
                           ? "Hide password"
@@ -530,7 +528,7 @@ export default function Login() {
                 </label>
 
                 {!isLoginMode && (
-                  <p className="text-xs leading-5 text-[#8E8E93]">
+                  <p className="text-xs leading-5 text-[var(--ed-color-8e8e93)]">
                     Your username will be
                     used when signing in.
                     Use a password that is
@@ -544,7 +542,7 @@ export default function Login() {
                   disabled={
                     submitting
                   }
-                  className="mt-2 w-full rounded-[15px] bg-[#0091FF] px-5 py-3.5 text-sm font-semibold text-white hover:bg-[#007AFF] disabled:cursor-not-allowed disabled:bg-[#C7C7CC]"
+                  className="mt-2 w-full rounded-[15px] bg-[#0091ff] px-5 py-3.5 text-sm font-semibold text-white hover:bg-[#007aff] disabled:cursor-not-allowed disabled:bg-[var(--ed-color-c7c7cc)]"
                 >
                   {submitting
                     ? isLoginMode
@@ -555,8 +553,10 @@ export default function Login() {
                       : "Create Account"}
                 </button>
               </form>
+              {isLoginMode && <button type="button" className="mt-4 text-sm font-semibold text-[var(--ed-accent-text)]" onClick={() => setShowRecovery((current) => !current)}>Forgot password?</button>}
+              {showRecovery && <PasswordRecovery onClose={() => setShowRecovery(false)} />}
 
-              <p className="mt-7 text-sm text-[#7A7A7F]">
+              <p className="mt-7 text-sm text-[var(--ed-color-7a7a7f)]">
                 {isLoginMode
                   ? "New to EduLITE?"
                   : "Already have an EduLITE account?"}{" "}
@@ -569,7 +569,7 @@ export default function Login() {
                   disabled={
                     submitting
                   }
-                  className="font-semibold text-[#007AFF] hover:text-[#005FCC] disabled:cursor-not-allowed disabled:text-[#A1A1A6]"
+                  className="font-semibold text-[var(--ed-color-007aff)] hover:text-[var(--ed-color-005fcc)] disabled:cursor-not-allowed disabled:text-[var(--ed-color-a1a1a6)]"
                 >
                   {isLoginMode
                     ? "Create an account"
@@ -577,7 +577,7 @@ export default function Login() {
                 </button>
               </p>
 
-              <p className="mt-12 text-[11px] leading-5 text-[#A1A1A6]">
+              <p className="mt-12 text-[11px] leading-5 text-[var(--ed-color-a1a1a6)]">
                 EduLITE · Student
                 performance and
                 learning-support
@@ -603,8 +603,8 @@ function ModeButton({
       aria-pressed={active}
       className={`rounded-[10px] px-4 py-2 text-sm font-semibold ${
         active
-          ? "bg-white text-[#1C1C1E] shadow-[0_1px_4px_rgba(31,41,55,0.08)]"
-          : "text-[#8E8E93] hover:text-[#3A3A3C]"
+          ? "bg-[var(--ed-surface)] text-[var(--ed-color-1c1c1e)] shadow-[0_1px_4px_rgba(31,41,55,0.08)]"
+          : "text-[var(--ed-color-8e8e93)] hover:text-[var(--ed-color-3a3a3c)]"
       }`}
     >
       {label}

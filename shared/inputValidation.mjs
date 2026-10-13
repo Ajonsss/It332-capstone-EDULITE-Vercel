@@ -26,6 +26,11 @@ const DEFAULT_LIMITS = { personName: FIELD_LIMITS.name, section: FIELD_LIMITS.se
 
 function syntaxError(value, { kind = "text", label = "This field", maxLength = DEFAULT_LIMITS[kind] } = {}) {
   if (typeof value !== "string") return `${label} must be text.`;
+  if (kind === "budgetOfWork") {
+    if (/[\p{Cf}\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u.test(value)) return `${label} cannot contain control or invisible characters.`;
+    if (value.length > 5000) return `${label} must be at most 5000 characters.`;
+    return "";
+  }
   if (CONTROL_CHARACTERS.test(value)) return `${label} cannot contain control or invisible characters.`;
   if (maxLength && value.length > maxLength) return `${label} must be at most ${maxLength} characters.`;
   if (kind === "personName" && !PERSON_CHARACTERS.test(value)) return `${label} accepts letters, spaces, and name punctuation only. Numbers are not allowed.`;

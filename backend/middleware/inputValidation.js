@@ -66,6 +66,7 @@ export function validateRequestInputs(req, res, next) {
     if (typeof body.category !== "string" || !Object.hasOwn(limits, body.category)) fields.category = "Select a valid ECR grading category.";
     const sequenceLimit = typeof body.category === "string" && Object.hasOwn(limits, body.category) ? limits[body.category] : 1;
     check("sequence", { kind: "integer", label: "ECR slot", min: 1, max: sequenceLimit });
+    check("budget_of_work", { kind: "budgetOfWork", label: "Budget of Work", required: false });
     check("total_items", { kind: "integer", label: "Highest Possible Score", min: 1 });
     check("date", { kind: "date", label: "Assessment date" });
     id("subject_id", "subject");

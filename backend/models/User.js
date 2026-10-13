@@ -2,6 +2,12 @@ import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
+    activeSchoolYearId: { type: mongoose.Schema.Types.ObjectId, ref: "SchoolYear", default: null },
+    legacyRules: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
+    sessionVersion: { type: Number, default: 0 },
+    recoveryHash: { type: String, select: false },
+    loginFailures: { type: Number, default: 0 },
+    lockedUntil: { type: Date, default: null },
     legacyId: {
       type: Number,
       unique: true,

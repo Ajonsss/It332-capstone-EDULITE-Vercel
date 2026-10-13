@@ -1,6 +1,8 @@
 import express from "express";
 import mongoose from "mongoose";
 import multer from "multer";
+import { getAcademicContext } from "./services/academicContext.js";
+import AuditEvent from "./models/AuditEvent.js";
 import Student from "./models/Student.js";
 import Section from "./models/Section.js";
 import Subject from "./models/Subject.js";
@@ -81,8 +83,8 @@ export function createStudentImportRouter({
         const sectionId = sectionsByKey.get(student.section.toLowerCase())._id;
         const escapedName = student.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         return { updateOne: {
-          filter: { ownerId, grade: student.grade, sectionId, name: { $regex: `^${escapedName}$`, $options: "i" } },
-          update: { $setOnInsert: { ownerId, name: student.name, grade: student.grade, sectionId, subjectIds, createdAt: importedAt, updatedAt: importedAt } },
+          filter: { ownerId, ...(getAcademicContext() ? { schoolYearId: getAcademicContext().schoolYearId } : {}), archived: { $ne: true }, grade: student.grade, sectionId, name: { $regex: `^${escapedName}$`, $options: "i" } },
+          update: { $setOnInsert: { ownerId, ...(getAcademicContext() ? { schoolYearId: getAcademicContext().schoolYearId } : {}), name: student.name, grade: student.grade, sectionId, subjectIds, createdAt: importedAt, updatedAt: importedAt } },
           upsert: true,
         } };
       });
@@ -109,6 +111,7 @@ export function createStudentImportRouter({
         }
       });
       const importedCount = Object.keys(upserted).length;
+      if (getAcademicContext() && importedCount) await AuditEvent.create({ ownerId, schoolYearId: getAcademicContext().schoolYearId, action: "import", resource: "Student", changes: { importedCount, studentIds: Object.values(upserted) } });
       return res.status(issues.length ? 207 : 200).json({
         message: `${importedCount} student${importedCount === 1 ? "" : "s"} imported. ${skipped.length} duplicate${skipped.length === 1 ? "" : "s"} skipped.${issues.length ? ` ${issues.length} row(s) could not be saved.` : ""}`,
         imported_count: importedCount, skipped_count: skipped.length, failed_count: issues.length, skipped, issues,

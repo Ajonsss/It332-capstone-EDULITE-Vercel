@@ -45,9 +45,9 @@ export default function ValidatedInput({
         onInvalid={(event) => { setTouched(true); onInvalid?.(event); }}
         aria-invalid={Boolean(visibleError)}
         aria-describedby={[props["aria-describedby"], visibleError ? errorId : null].filter(Boolean).join(" ") || undefined}
-        className={`${className}${visibleError ? " border-[#D94141]" : ""}`}
+        className={`${className}${visibleError ? " border-[var(--ed-color-d94141)]" : ""}`}
       />
-      {visibleError && <span id={errorId} role="alert" className="mt-2 block text-xs leading-5 text-[#C53939]">{visibleError}</span>}
+      {visibleError && <span id={errorId} role="alert" className="mt-2 block text-xs leading-5 text-[var(--ed-color-c53939)]">{visibleError}</span>}
     </>
   );
 }

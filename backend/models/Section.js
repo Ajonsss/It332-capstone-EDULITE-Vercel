@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import academicPlugin from "./academicPlugin.js";
 
 const sectionSchema =
   new mongoose.Schema(
@@ -61,6 +62,8 @@ sectionSchema.index(
       "unique_section_name_per_owner",
   },
 );
+
+sectionSchema.plugin(academicPlugin, { scopeSchoolYear: false });
 
 const Section =
   mongoose.models.Section ||

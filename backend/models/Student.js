@@ -1,8 +1,14 @@
 import mongoose from "mongoose";
+import academicPlugin from "./academicPlugin.js";
 
 const studentSchema =
   new mongoose.Schema(
     {
+      previousEnrollmentId: { type: mongoose.Schema.Types.ObjectId, ref: "Student", default: null },
+      archived: { type: Boolean, default: false, index: true },
+      archivedAt: { type: Date, default: null },
+      archiveSnapshot: { type: mongoose.Schema.Types.Mixed, select: false },
+
       legacyId: {
         type: Number,
         default: null,
@@ -71,6 +77,17 @@ const studentSchema =
       collection: "students",
     },
   );
+
+studentSchema.plugin(academicPlugin);
+
+// Active class workflows exclude archives; archive routes explicitly opt in.
+studentSchema.pre(/^find/, function excludeArchives() {
+  if (!this.getOptions().includeArchived) this.where({ archived: { $ne: true } });
+});
+studentSchema.pre("countDocuments", function countActiveStudents() {
+  if (!this.getOptions().includeArchived) this.where({ archived: { $ne: true } });
+});
+studentSchema.index({ ownerId: 1, archived: 1, archivedAt: -1 });
 
 studentSchema.pre(
   "validate",

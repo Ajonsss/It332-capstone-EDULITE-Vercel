@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import academicPlugin from "./academicPlugin.js";
 
 const assessmentScoreSchema =
   new mongoose.Schema(
@@ -78,6 +79,8 @@ assessmentScoreSchema.index(
       "unique_student_assessment_score_per_owner",
   },
 );
+
+assessmentScoreSchema.plugin(academicPlugin);
 
 const AssessmentScore =
   mongoose.models

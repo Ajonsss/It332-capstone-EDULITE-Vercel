@@ -54,6 +54,7 @@ function todayAsInputValue() {
 function emptyAssessmentForm() {
   return {
     name: "",
+    budget_of_work: "",
     term: "1",
     category: "written_work",
     sequence: "1",
@@ -91,6 +92,7 @@ export default function AssessmentForm({
   onSaved,
 } = {}) {
   const [formData, setFormData] = useState(emptyAssessmentForm);
+  const [gradingRules, setGradingRules] = useState({ writtenWorkWeight: 20, performanceTaskWeight: 50, examinationWeight: 30 });
   const [subjects, setSubjects] = useState([]);
   const [students, setStudents] = useState([]);
   const [scores, setScores] = useState({});
@@ -182,9 +184,8 @@ export default function AssessmentForm({
       setScores({});
 
       try {
-        const subjectResponse = await axios.get(
-          `${API_URL}/subjects`,
-        );
+        const [subjectResponse, ruleResponse] = await Promise.all([axios.get(`${API_URL}/subjects`), axios.get(`${API_URL}/grading-rules`)]);
+        if (!cancelled) setGradingRules(ruleResponse.data);
 
         if (cancelled) {
           return;
@@ -207,6 +208,7 @@ export default function AssessmentForm({
 
           setFormData({
             name: assessment.name ?? "",
+            budget_of_work: assessment.budget_of_work ?? "",
 
             // Legacy assessments intentionally stay blank until the
             // teacher explicitly classifies them into the new ECR system.
@@ -379,6 +381,9 @@ export default function AssessmentForm({
       return;
     }
 
+    const budgetError = validateInput(formData.budget_of_work, { kind: "budgetOfWork", label: "Budget of Work" });
+    if (budgetError) { setError(budgetError); return; }
+
     const dateError = validateInput(formData.date, { kind: "date", label: "Assessment date" });
     if (dateError) { setError(dateError); return; }
 
@@ -388,8 +393,6 @@ export default function AssessmentForm({
       }
 
       const score = parseWholeNumber(value);
-
-      const score = Number(value);
 
       if (
         !Number.isInteger(score) ||
@@ -410,6 +413,7 @@ export default function AssessmentForm({
 
     const payload = {
       name: formData.name.trim(),
+      budget_of_work: (formData.budget_of_work ?? "").trim(),
       term,
       category: formData.category,
       sequence,
@@ -461,19 +465,19 @@ export default function AssessmentForm({
   const formCard = (
     <section
       aria-labelledby="assessment-form-title"
-      className="overflow-hidden rounded-[24px] border border-[#E3E9EE] bg-white"
+      className="overflow-hidden rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)]"
     >
-      <div className="border-b border-[#EEF2F5] px-6 py-6 sm:px-8 sm:py-7">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#36A9E1]">
+      <div className="border-b border-[var(--ed-color-eef2f5)] px-6 py-6 sm:px-8 sm:py-7">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">
           Three-Term ECR
         </p>
         <h2
           id="assessment-form-title"
-          className="mt-2 text-3xl font-extrabold tracking-[-0.03em] text-[#36A9E1]"
+          className="mt-2 text-3xl font-extrabold tracking-[-0.03em] text-[var(--ed-primary)]"
         >
           {isEditing ? "Edit Assessment" : "Create Assessment"}
         </h2>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-[#71808D]">
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ed-color-71808d)]">
           Set the ECR position and Highest Possible Score, then enter learner raw scores.
         </p>
       </div>
@@ -482,7 +486,7 @@ export default function AssessmentForm({
         {error && (
           <div
             role="alert"
-            className="mb-6 rounded-[16px] border border-[#F6CCCC] bg-[#FFF3F3] p-4 text-sm text-[#C53939]"
+            className="mb-6 rounded-[16px] border border-[var(--ed-color-f6cccc)] bg-[var(--ed-color-fff3f3)] p-4 text-sm text-[var(--ed-color-c53939)]"
           >
             {error}
           </div>
@@ -492,7 +496,7 @@ export default function AssessmentForm({
           <div
             role="status"
             aria-live="polite"
-            className="rounded-[18px] bg-[#F7F9FB] py-16 text-center text-sm text-[#8A98A5]"
+            className="rounded-[18px] bg-[var(--ed-color-f7f9fb)] py-16 text-center text-sm text-[var(--ed-color-8a98a5)]"
           >
             Loading assessment form...
           </div>
@@ -500,14 +504,14 @@ export default function AssessmentForm({
           <form onSubmit={handleSubmit} aria-busy={saving} className="space-y-8">
             <section>
               <div className="mb-5">
-                <h3 className="text-xl font-bold text-[#25313C]">Assessment Details</h3>
-                <p className="mt-1 text-sm text-[#71808D]">
+                <h3 className="text-xl font-bold text-[var(--ed-color-25313c)]">Assessment Details</h3>
+                <p className="mt-1 text-sm text-[var(--ed-color-71808d)]">
                   Choose the subject, term, component, and exact ECR slot.
                 </p>
               </div>
 
               {isEditing && (!formData.term || !formData.category || !formData.sequence) && (
-                <div className="mb-5 rounded-[14px] border border-[#F1D58B] bg-[#FFF9E8] p-4 text-sm text-[#8A6A12]">
+                <div className="mb-5 rounded-[14px] border border-[var(--ed-color-f1d58b)] bg-[var(--ed-color-fff9e8)] p-4 text-sm text-[var(--ed-color-8a6a12)]">
                   This legacy assessment must be assigned to a term and ECR slot before it can participate in official grades.
                 </div>
               )}
@@ -524,9 +528,25 @@ export default function AssessmentForm({
                       setFormData((current) => ({ ...current, name: event.target.value }))
                     }
                     placeholder="e.g. Reading Comprehension Activity"
-                    className="w-full rounded-[13px] border border-[#D8E1E7] bg-white px-4 py-3 text-[#25313C] placeholder-[#A0ABB4] outline-none focus:border-[#36A9E1] focus:ring-4 focus:ring-[#36A9E1]/10"
+                    className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] placeholder-[var(--ed-color-a0abb4)] outline-none focus:border-[var(--ed-primary)] focus:ring-4 focus:ring-[var(--ed-primary)]/10"
                     required
                   />
+                </div>
+
+                <div className="md:col-span-2">
+                  <FormLabel htmlFor="assessment-budget-of-work" label="Budget of Work" required />
+                  <textarea
+                    id="assessment-budget-of-work"
+                    value={formData.budget_of_work ?? ""}
+                    onChange={(event) => setFormData((current) => ({ ...current, budget_of_work: event.target.value }))}
+                    rows={5}
+                    maxLength={5000}
+                    required
+                    aria-describedby="budget-of-work-help"
+                    placeholder="Topics and learning competencies covered, learning objectives, lesson scope, and suggested time allocation."
+                    className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)] focus:ring-4 focus:ring-[var(--ed-primary)]/10"
+                  />
+                  <p id="budget-of-work-help" className="mt-2 text-xs text-[var(--ed-color-71808d)]">Describe what this assessment covers. AI uses this to create practice activities for students who need support. Maximum 5,000 characters.</p>
                 </div>
 
                 <div>
@@ -535,7 +555,7 @@ export default function AssessmentForm({
                     id="assessment-subject"
                     value={formData.subject_id}
                     onChange={(event) => handleSubjectChange(event.target.value)}
-                    className="w-full rounded-[13px] border border-[#D8E1E7] bg-white px-4 py-3 text-[#25313C] outline-none focus:border-[#36A9E1] focus:ring-4 focus:ring-[#36A9E1]/10"
+                    className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)] focus:ring-4 focus:ring-[var(--ed-primary)]/10"
                     required
                   >
                     <option value="">Select a subject</option>
@@ -553,7 +573,7 @@ export default function AssessmentForm({
                     onChange={(event) =>
                       setFormData((current) => ({ ...current, term: event.target.value }))
                     }
-                    className="w-full rounded-[13px] border border-[#D8E1E7] bg-white px-4 py-3 text-[#25313C] outline-none focus:border-[#36A9E1] focus:ring-4 focus:ring-[#36A9E1]/10"
+                    className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)] focus:ring-4 focus:ring-[var(--ed-primary)]/10"
                     required
                   >
                     <option value="">Select a term</option>
@@ -569,7 +589,7 @@ export default function AssessmentForm({
                     id="assessment-category"
                     value={formData.category}
                     onChange={(event) => handleCategoryChange(event.target.value)}
-                    className="w-full rounded-[13px] border border-[#D8E1E7] bg-white px-4 py-3 text-[#25313C] outline-none focus:border-[#36A9E1] focus:ring-4 focus:ring-[#36A9E1]/10"
+                    className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)] focus:ring-4 focus:ring-[var(--ed-primary)]/10"
                     required
                   >
                     <option value="">Select a component</option>
@@ -578,7 +598,7 @@ export default function AssessmentForm({
                     ))}
                   </select>
                   {selectedCategory && (
-                    <p className="mt-2 text-xs text-[#8A98A5]">{selectedCategory.weightLabel}</p>
+                    <p className="mt-2 text-xs text-[var(--ed-color-8a98a5)]">{formData.category === "written_work" ? `${gradingRules.writtenWorkWeight}% of Initial Grade` : formData.category === "performance_task" ? `${gradingRules.performanceTaskWeight}% of Initial Grade` : `Part of the ${gradingRules.examinationWeight}% Summative/Exam component`}</p>
                   )}
                 </div>
 
@@ -591,7 +611,7 @@ export default function AssessmentForm({
                       setFormData((current) => ({ ...current, sequence: event.target.value }))
                     }
                     disabled={!selectedCategory}
-                    className="w-full rounded-[13px] border border-[#D8E1E7] bg-white px-4 py-3 text-[#25313C] outline-none focus:border-[#36A9E1] focus:ring-4 focus:ring-[#36A9E1]/10 disabled:bg-[#F0F3F5]"
+                    className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)] focus:ring-4 focus:ring-[var(--ed-primary)]/10 disabled:bg-[var(--ed-color-f0f3f5)]"
                     required
                   >
                     <option value="">Select a slot</option>
@@ -614,7 +634,7 @@ export default function AssessmentForm({
                     onChange={(event) =>
                       setFormData((current) => ({ ...current, date: event.target.value }))
                     }
-                    className="w-full rounded-[13px] border border-[#D8E1E7] bg-white px-4 py-3 text-[#25313C] outline-none focus:border-[#36A9E1] focus:ring-4 focus:ring-[#36A9E1]/10"
+                    className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)] focus:ring-4 focus:ring-[var(--ed-primary)]/10"
                     required
                   />
                 </div>
@@ -631,17 +651,17 @@ export default function AssessmentForm({
                       setFormData((current) => ({ ...current, total_items: event.target.value }))
                     }
                     placeholder="e.g. 50"
-                    className="w-full rounded-[13px] border border-[#D8E1E7] bg-white px-4 py-3 text-[#25313C] placeholder-[#A0ABB4] outline-none focus:border-[#36A9E1] focus:ring-4 focus:ring-[#36A9E1]/10"
+                    className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] placeholder-[var(--ed-color-a0abb4)] outline-none focus:border-[var(--ed-primary)] focus:ring-4 focus:ring-[var(--ed-primary)]/10"
                     required
                   />
                 </div>
               </div>
 
-              <div className="mt-5 rounded-[14px] bg-[#F4F7FA] p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8A98A5]">
+              <div className="mt-5 rounded-[14px] bg-[var(--ed-color-f4f7fa)] p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ed-color-8a98a5)]">
                   ECR Position
                 </p>
-                <p className="mt-1.5 font-semibold text-[#25313C]">
+                <p className="mt-1.5 font-semibold text-[var(--ed-color-25313c)]">
                   {formData.term ? `Term ${formData.term}` : "No term"}
                   {" · "}
                   {selectedCategory?.label ?? "No component"}
@@ -651,42 +671,42 @@ export default function AssessmentForm({
               </div>
             </section>
 
-            <div className="h-px bg-[#EEF2F5]" />
+            <div className="h-px bg-[var(--ed-color-eef2f5)]" />
 
             <section>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <h3 className="text-xl font-bold text-[#25313C]">Student Raw Scores</h3>
-                  <p className="mt-1 text-sm text-[#71808D]">
+                  <h3 className="text-xl font-bold text-[var(--ed-color-25313c)]">Student Raw Scores</h3>
+                  <p className="mt-1 text-sm text-[var(--ed-color-71808d)]">
                     Leave a score blank when it has not been recorded yet. A value of 0 is a real score.
                   </p>
                 </div>
-                <span className="text-sm font-semibold text-[#36A9E1]">
+                <span className="text-sm font-semibold text-[var(--ed-primary)]">
                   {enteredCount} of {students.length} entered
                 </span>
               </div>
 
               {loadingStudents ? (
-                <div className="mt-5 rounded-[16px] bg-[#F7F9FB] py-12 text-center text-sm text-[#8A98A5]">
+                <div className="mt-5 rounded-[16px] bg-[var(--ed-color-f7f9fb)] py-12 text-center text-sm text-[var(--ed-color-8a98a5)]">
                   Loading enrolled students...
                 </div>
               ) : (
-                <div className="mt-5 overflow-x-auto rounded-[18px] border border-[#E3E9EE]">
+                <div className="mt-5 overflow-x-auto rounded-[18px] border border-[var(--ed-color-e3e9ee)]">
                   <table className="w-full min-w-[650px]">
-                    <thead className="bg-[#F8FAFB]">
-                      <tr className="border-b border-[#E3E9EE]">
-                        <th className="px-5 py-3.5 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8A98A5]">Student</th>
-                        <th className="px-5 py-3.5 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8A98A5]">Grade</th>
-                        <th className="px-5 py-3.5 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8A98A5]">Section</th>
-                        <th className="px-5 py-3.5 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8A98A5]">Raw Score</th>
+                    <thead className="bg-[var(--ed-color-f8fafb)]">
+                      <tr className="border-b border-[var(--ed-color-e3e9ee)]">
+                        <th className="px-5 py-3.5 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ed-color-8a98a5)]">Student</th>
+                        <th className="px-5 py-3.5 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ed-color-8a98a5)]">Grade</th>
+                        <th className="px-5 py-3.5 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ed-color-8a98a5)]">Section</th>
+                        <th className="px-5 py-3.5 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ed-color-8a98a5)]">Raw Score</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#EEF2F5]">
+                    <tbody className="divide-y divide-[var(--ed-color-eef2f5)]">
                       {students.map((student) => (
-                        <tr key={student.id} className="hover:bg-[#FBFCFD]">
-                          <td className="px-5 py-4 font-semibold text-[#25313C]">{student.name}</td>
-                          <td className="px-5 py-4 text-center text-sm text-[#71808D]">{student.grade}</td>
-                          <td className="px-5 py-4 text-center text-sm text-[#71808D]">{student.section}</td>
+                        <tr key={student.id} className="hover:bg-[var(--ed-color-fbfcfd)]">
+                          <td className="px-5 py-4 font-semibold text-[var(--ed-color-25313c)]">{student.name}</td>
+                          <td className="px-5 py-4 text-center text-sm text-[var(--ed-color-71808d)]">{student.grade}</td>
+                          <td className="px-5 py-4 text-center text-sm text-[var(--ed-color-71808d)]">{student.section}</td>
                           <td className="px-5 py-4">
                             <div className="flex items-center justify-center gap-2">
                               <div className="w-24">
@@ -698,18 +718,18 @@ export default function AssessmentForm({
                                   max={totalItems > 0 ? totalItems : Number.MAX_SAFE_INTEGER}
                                   value={scores[student.id] ?? ""}
                                   onChange={(event) => handleScoreChange(student.id, event.target.value)}
-                                  className="w-24 rounded-[11px] border border-[#D8E1E7] bg-white px-3 py-2 text-center font-semibold text-[#25313C] outline-none focus:border-[#36A9E1] focus:ring-4 focus:ring-[#36A9E1]/10"
+                                  className="w-24 rounded-[11px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-3 py-2 text-center font-semibold text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)] focus:ring-4 focus:ring-[var(--ed-primary)]/10"
                                   placeholder="—"
                                 />
                               </div>
-                              <span className="text-xs text-[#8A98A5]">/ {totalItems > 0 ? totalItems : "?"}</span>
+                              <span className="text-xs text-[var(--ed-color-8a98a5)]">/ {totalItems > 0 ? totalItems : "?"}</span>
                             </div>
                           </td>
                         </tr>
                       ))}
                       {students.length === 0 && (
                         <tr>
-                          <td colSpan="4" className="px-5 py-12 text-center text-sm text-[#8A98A5]">
+                          <td colSpan="4" className="px-5 py-12 text-center text-sm text-[var(--ed-color-8a98a5)]">
                             No students are enrolled in this subject yet. The assessment can still be saved.
                           </td>
                         </tr>
@@ -720,19 +740,19 @@ export default function AssessmentForm({
               )}
             </section>
 
-            <div className="flex flex-col gap-2 border-t border-[#EEF2F5] pt-6 sm:flex-row sm:justify-end">
+            <div className="flex flex-col gap-2 border-t border-[var(--ed-color-eef2f5)] pt-6 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={closeForm}
                 disabled={saving}
-                className="rounded-[12px] border border-[#D8E1E7] bg-white px-5 py-2.5 text-sm font-semibold text-[#52616D] hover:bg-[#F4F7FA] disabled:opacity-50"
+                className="rounded-[12px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-5 py-2.5 text-sm font-semibold text-[var(--ed-color-52616d)] hover:bg-[var(--ed-color-f4f7fa)] disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={saving || subjects.length === 0}
-                className="rounded-[12px] bg-[#36A9E1] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#168CC8] disabled:bg-[#C8D1D8]"
+                className="rounded-[12px] bg-[var(--ed-primary)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--ed-primary-hover)] disabled:bg-[var(--ed-color-c8d1d8)]"
               >
                 {saving ? "Saving..." : isEditing ? "Update Assessment" : "Save Assessment"}
               </button>
@@ -748,7 +768,7 @@ export default function AssessmentForm({
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F7FA] p-4 text-[#25313C] sm:p-8" style={{ fontFamily: APPLE_FONT }}>
+    <div className="min-h-screen bg-[var(--ed-color-f4f7fa)] p-4 text-[var(--ed-color-25313c)] sm:p-8" style={{ fontFamily: APPLE_FONT }}>
       <div className="mx-auto max-w-6xl">{formCard}</div>
     </div>
   );
@@ -756,8 +776,8 @@ export default function AssessmentForm({
 
 function FormLabel({ htmlFor, label, required = false }) {
   return (
-    <label htmlFor={htmlFor} className="mb-2 block text-sm font-semibold text-[#52616D]">
-      {label} {required && <span className="text-[#D94141]">*</span>}
+    <label htmlFor={htmlFor} className="mb-2 block text-sm font-semibold text-[var(--ed-color-52616d)]">
+      {label} {required && <span className="text-[var(--ed-color-d94141)]">*</span>}
     </label>
   );
 }

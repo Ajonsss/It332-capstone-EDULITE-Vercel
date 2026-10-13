@@ -276,19 +276,19 @@ export default function StudentForm({
   const formCard = (
     <section
       aria-labelledby="student-form-title"
-      className="overflow-hidden rounded-[24px] border border-[#E3E9EE] bg-white"
+      className="overflow-hidden rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)]"
     >
-      <div className="border-b border-[#EEF2F5] px-6 py-6 sm:px-8 sm:py-7">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#36A9E1]">
+      <div className="border-b border-[var(--ed-color-eef2f5)] px-6 py-6 sm:px-8 sm:py-7">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">
           Student Details
         </p>
         <h2
           id="student-form-title"
-          className="mt-2 text-3xl font-extrabold tracking-[-0.03em] text-[#36A9E1]"
+          className="mt-2 text-3xl font-extrabold tracking-[-0.03em] text-[var(--ed-primary)]"
         >
           {isEditing ? "Edit Student" : "Register Student"}
         </h2>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-[#71808D]">
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ed-color-71808d)]">
           Enter the learner's identity and academic enrollment. Only fields used
           by EduLITE are shown.
         </p>
@@ -298,7 +298,7 @@ export default function StudentForm({
         {error && (
           <div
             role="alert"
-            className="mb-6 rounded-[16px] border border-[#F6CCCC] bg-[#FFF3F3] p-4 text-sm text-[#C53939]"
+            className="mb-6 rounded-[16px] border border-[var(--ed-color-f6cccc)] bg-[var(--ed-color-fff3f3)] p-4 text-sm text-[var(--ed-color-c53939)]"
           >
             {error}
           </div>
@@ -308,7 +308,7 @@ export default function StudentForm({
           <div
             role="status"
             aria-live="polite"
-            className="rounded-[18px] bg-[#F7F9FB] py-16 text-center text-sm text-[#8A98A5]"
+            className="rounded-[18px] bg-[var(--ed-color-f7f9fb)] py-16 text-center text-sm text-[var(--ed-color-8a98a5)]"
           >
             Loading student form...
           </div>
@@ -316,8 +316,8 @@ export default function StudentForm({
           <form onSubmit={handleSubmit} aria-busy={saving} className="space-y-8">
             <section>
               <div className="mb-5">
-                <h3 className="text-xl font-bold text-[#25313C]">Identity</h3>
-                <p className="mt-1 text-sm text-[#71808D]">
+                <h3 className="text-xl font-bold text-[var(--ed-color-25313c)]">Identity</h3>
+                <p className="mt-1 text-sm text-[var(--ed-color-71808d)]">
                   Enter the student's complete name.
                 </p>
               </div>
@@ -354,7 +354,7 @@ export default function StudentForm({
 
                 <div>
                   <FormLabel htmlFor="student-suffix" label="Suffix" />
-                  <select id="student-suffix" value={formData.suffix} onChange={(event) => updateField("suffix", event.target.value)} className="w-full rounded-[13px] border border-[#D8E1E7] bg-white px-4 py-3 text-[#25313C] outline-none focus:border-[#36A9E1]">
+                  <select id="student-suffix" value={formData.suffix} onChange={(event) => updateField("suffix", event.target.value)} className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)]">
                     <option value="">None</option>
                     {[...SUFFIXES].map((suffix) => <option key={suffix} value={suffix}>{suffix}</option>)}
                   </select>
@@ -362,14 +362,14 @@ export default function StudentForm({
               </div>
             </section>
 
-            <div className="h-px bg-[#EEF2F5]" />
+            <div className="h-px bg-[var(--ed-color-eef2f5)]" />
 
             <section>
               <div className="mb-5">
-                <h3 className="text-xl font-bold text-[#25313C]">
+                <h3 className="text-xl font-bold text-[var(--ed-color-25313c)]">
                   Academic Information
                 </h3>
-                <p className="mt-1 text-sm text-[#71808D]">
+                <p className="mt-1 text-sm text-[var(--ed-color-71808d)]">
                   Assign the student's grade, section, and enrolled subjects.
                 </p>
               </div>
@@ -384,7 +384,7 @@ export default function StudentForm({
                     min={1}
                     value={formData.grade}
                     onChange={(event) => updateField("grade", event.target.value)}
-                    className="w-full rounded-[13px] border border-[#D8E1E7] bg-white px-4 py-3 text-[#25313C] outline-none focus:border-[#36A9E1] focus:ring-4 focus:ring-[#36A9E1]/10"
+                    className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)] focus:ring-4 focus:ring-[var(--ed-primary)]/10"
                     required
                   />
                 </div>
@@ -395,7 +395,7 @@ export default function StudentForm({
                     id="student-section"
                     value={formData.section}
                     onChange={(event) => updateField("section", event.target.value)}
-                    className="w-full rounded-[13px] border border-[#D8E1E7] bg-white px-4 py-3 text-[#25313C] outline-none focus:border-[#36A9E1] focus:ring-4 focus:ring-[#36A9E1]/10"
+                    className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)] focus:ring-4 focus:ring-[var(--ed-primary)]/10"
                     required
                   >
                     <option value="">Select a section</option>
@@ -409,8 +409,8 @@ export default function StudentForm({
               </div>
 
               <fieldset className="mt-6">
-                <legend className="mb-3 text-sm font-semibold text-[#52616D]">
-                  Subjects <span className="text-[#D94141]">*</span>
+                <legend className="mb-3 text-sm font-semibold text-[var(--ed-color-52616d)]">
+                  Subjects <span className="text-[var(--ed-color-d94141)]">*</span>
                 </legend>
 
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -423,15 +423,15 @@ export default function StudentForm({
                         key={subjectId}
                         className={`flex cursor-pointer items-center gap-3 rounded-[13px] border px-4 py-3 transition ${
                           selected
-                            ? "border-[#A9DDF3] bg-[#EAF6FC] text-[#168CC8]"
-                            : "border-[#E3E9EE] bg-white text-[#52616D] hover:bg-[#F8FAFB]"
+                            ? "border-[var(--ed-color-a9ddf3)] bg-[var(--ed-color-eaf6fc)] text-[var(--ed-color-168cc8)]"
+                            : "border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] text-[var(--ed-color-52616d)] hover:bg-[var(--ed-color-f8fafb)]"
                         }`}
                       >
                         <input
                           type="checkbox"
                           checked={selected}
                           onChange={() => toggleSubject(subjectId)}
-                          className="h-4 w-4 accent-[#36A9E1]"
+                          className="h-4 w-4 accent-[var(--ed-primary)]"
                         />
                         <span className="font-medium">{subject.name}</span>
                       </label>
@@ -440,26 +440,26 @@ export default function StudentForm({
                 </div>
 
                 {subjects.length === 0 && (
-                  <p className="rounded-[14px] bg-[#FFF8E6] p-4 text-sm text-[#8A6A12]">
+                  <p className="rounded-[14px] bg-[var(--ed-color-fff8e6)] p-4 text-sm text-[var(--ed-color-8a6a12)]">
                     No subjects exist yet. Add a subject from the dashboard first.
                   </p>
                 )}
               </fieldset>
             </section>
 
-            <div className="flex flex-col gap-2 border-t border-[#EEF2F5] pt-6 sm:flex-row sm:justify-end">
+            <div className="flex flex-col gap-2 border-t border-[var(--ed-color-eef2f5)] pt-6 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={closeForm}
                 disabled={saving}
-                className="rounded-[12px] border border-[#D8E1E7] bg-white px-5 py-2.5 text-sm font-semibold text-[#52616D] hover:bg-[#F4F7FA] disabled:opacity-50"
+                className="rounded-[12px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-5 py-2.5 text-sm font-semibold text-[var(--ed-color-52616d)] hover:bg-[var(--ed-color-f4f7fa)] disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={saving || sections.length === 0 || subjects.length === 0}
-                className="rounded-[12px] bg-[#36A9E1] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#168CC8] disabled:bg-[#C8D1D8]"
+                className="rounded-[12px] bg-[var(--ed-primary)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--ed-primary-hover)] disabled:bg-[var(--ed-color-c8d1d8)]"
               >
                 {saving ? "Saving..." : isEditing ? "Update Student" : "Save Student"}
               </button>
@@ -476,7 +476,7 @@ export default function StudentForm({
 
   return (
     <div
-      className="min-h-screen bg-[#F4F7FA] p-4 text-[#25313C] sm:p-8"
+      className="min-h-screen bg-[var(--ed-color-f4f7fa)] p-4 text-[var(--ed-color-25313c)] sm:p-8"
       style={{ fontFamily: APPLE_FONT }}
     >
       <div className="mx-auto max-w-5xl">{formCard}</div>
@@ -486,8 +486,8 @@ export default function StudentForm({
 
 function FormLabel({ htmlFor, label, required = false }) {
   return (
-    <label htmlFor={htmlFor} className="mb-2 block text-sm font-semibold text-[#52616D]">
-      {label} {required && <span className="text-[#D94141]">*</span>}
+    <label htmlFor={htmlFor} className="mb-2 block text-sm font-semibold text-[var(--ed-color-52616d)]">
+      {label} {required && <span className="text-[var(--ed-color-d94141)]">*</span>}
     </label>
   );
 }
@@ -513,7 +513,7 @@ function TextField({
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         autoComplete={autoComplete}
-        className="w-full rounded-[13px] border border-[#D8E1E7] bg-white px-4 py-3 text-[#25313C] placeholder-[#A0ABB4] outline-none focus:border-[#36A9E1] focus:ring-4 focus:ring-[#36A9E1]/10"
+        className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] placeholder-[var(--ed-color-a0abb4)] outline-none focus:border-[var(--ed-primary)] focus:ring-4 focus:ring-[var(--ed-primary)]/10"
         required={required}
       />
     </div>

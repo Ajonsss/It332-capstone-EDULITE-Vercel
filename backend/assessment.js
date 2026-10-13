@@ -1,6 +1,6 @@
 import express from "express";
 import mongoose from "mongoose";
-import { isCalendarDate, parseWholeNumber } from "../shared/inputValidation.mjs";
+import { isCalendarDate, parseWholeNumber, validateInput } from "../shared/inputValidation.mjs";
 
 import Assessment, {
   ASSESSMENT_CATEGORIES,
@@ -202,6 +202,9 @@ async function validateAssessment(
     excludeAssessmentId = null,
   } = {},
 ) {
+  const budgetError = validateInput(body.budget_of_work, { kind: "budgetOfWork", label: "Budget of Work", required: false });
+  if (budgetError) return { error: budgetError };
+
   const name =
     normalizeText(body.name);
 
@@ -394,6 +397,7 @@ async function validateAssessment(
 
   return {
     value: {
+      ...(body.budget_of_work !== undefined ? { budgetOfWork: (body.budget_of_work ?? "").trim() } : {}),
       name,
 
       term,
@@ -669,6 +673,8 @@ function formatAssessment(
       formatDate(
         assessment.date,
       ),
+
+    budget_of_work: assessment.budgetOfWork ?? "",
 
     total_items:
       assessment.totalItems,

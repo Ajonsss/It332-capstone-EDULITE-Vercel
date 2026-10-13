@@ -1,3 +1,4 @@
+import { currentRules } from "../services/academicContext.js";
 /*
   ============================================================
   EduLITE 3-Term Grading Engine
@@ -531,12 +532,9 @@ export const TRANSMUTATION_TABLE = Object.freeze([
 
 function validateWeightConfiguration() {
   const overallTotal =
-    COMPONENT_WEIGHTS
-      .written_work +
-    COMPONENT_WEIGHTS
-      .performance_task +
-    COMPONENT_WEIGHTS
-      .examination;
+    (currentRules().writtenWorkWeight / 100) +
+    (currentRules().performanceTaskWeight / 100) +
+    (currentRules().examinationWeight / 100);
 
   const examinationTotal =
     EXAMINATION_INTERNAL_WEIGHTS
@@ -1801,8 +1799,7 @@ export function calculateWrittenWorks(
         .WRITTEN_WORK,
 
     weight:
-      COMPONENT_WEIGHTS
-        .written_work,
+      (currentRules().writtenWorkWeight / 100),
   });
 }
 
@@ -1824,8 +1821,7 @@ export function calculatePerformanceTasks(
         .PERFORMANCE_TASK,
 
     weight:
-      COMPONENT_WEIGHTS
-        .performance_task,
+      (currentRules().performanceTaskWeight / 100),
   });
 }
 
@@ -2325,8 +2321,7 @@ export function calculateExaminationGrade(
     null
       ? null
       : percentageScoreRaw *
-        COMPONENT_WEIGHTS
-          .examination;
+        (currentRules().examinationWeight / 100);
 
   const createdCount = [
     summativeTest1,
@@ -2392,8 +2387,7 @@ export function calculateExaminationGrade(
       "Summative Tests and Term Examination",
 
     weight:
-      COMPONENT_WEIGHTS
-        .examination,
+      (currentRules().examinationWeight / 100),
 
     status,
 
@@ -2900,7 +2894,7 @@ export function getGradeRemark(
   }
 
   return numericGrade >=
-    PASSING_GRADE
+    currentRules().passingGrade
     ? "PASSED"
     : "FAILED";
 }
@@ -2936,14 +2930,14 @@ export function getSupportClassification(
 
   if (
     numericGrade <
-    PASSING_GRADE
+    currentRules().passingGrade
   ) {
     return "At Risk";
   }
 
   if (
     numericGrade >=
-    HIGH_PERFORMING_GRADE
+    currentRules().highPerformingGrade
   ) {
     return "High Performing";
   }

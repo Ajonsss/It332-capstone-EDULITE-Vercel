@@ -468,6 +468,10 @@ router.delete(
         });
       }
 
+      const referenced = await Student.exists({ ownerId, subjectIds: subject._id }).setOptions({ acrossSchoolYears: true, includeArchived: true });
+      const historicalAssessments = await Assessment.exists({ ownerId, subjectId: subject._id }).setOptions({ acrossSchoolYears: true });
+      if (referenced || historicalAssessments) return res.status(409).json({ message: "This subject is used by enrollments or assessments in a school year or archive. Keep it to preserve those records." });
+
       const {
         studentCount,
         assessmentCount,

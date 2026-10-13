@@ -5,12 +5,14 @@ import {
   Routes,
 } from "react-router-dom";
 
+import { useTheme } from "./utils/theme";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
 import StudentForm from "./components/StudentForm";
 import AssessmentForm from "./components/AssessmentForm";
 
 function App() {
+  useTheme();
   return (
     <Router>
       <Routes>
