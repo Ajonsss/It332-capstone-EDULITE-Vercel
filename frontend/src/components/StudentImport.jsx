@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import axios from "axios";
+import LoadingIndicator from "./LoadingIndicator";
 
 import { API_URL } from "../utils/api.js";
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -120,7 +121,7 @@ export default function StudentImport({ subjects, onImported }) {
               )}
             </div>
           )}
-          <button type="submit" disabled={importing || !file || !subjectIds.length} className="rounded-[12px] bg-[var(--ed-primary)] px-5 py-3 text-sm font-semibold text-white hover:bg-[var(--ed-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50">{importing ? "Importing students..." : "Import students"}</button>
+          <button type="submit" disabled={importing || !file || !subjectIds.length} className="rounded-[12px] bg-[var(--ed-primary)] px-5 py-3 text-sm font-semibold text-white hover:bg-[var(--ed-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50">{importing ? <LoadingIndicator compact label="Importing students..." /> : "Import students"}</button>
         </form>
       )}
     </section>

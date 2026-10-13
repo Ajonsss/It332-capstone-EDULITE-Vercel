@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import ValidatedInput from "./ValidatedInput";
+import LoadingIndicator from "./LoadingIndicator";
 import { parseWholeNumber, validateInput } from "../../../shared/inputValidation.mjs";
 
 import { API_URL } from "../utils/api.js";
+import { usePageTitle } from "../utils/usePageTitle.js";
 
 const APPLE_FONT =
   '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
@@ -106,6 +108,8 @@ export default function AssessmentForm({
 
   const resolvedAssessmentId = assessmentId ?? params.id ?? null;
   const isEditing = Boolean(resolvedAssessmentId);
+
+  usePageTitle(isEditing ? "Edit Assessment" : "Create Assessment", !embedded);
 
   const selectedCategory = useMemo(
     () => getCategoryOption(formData.category),
@@ -493,13 +497,10 @@ export default function AssessmentForm({
         )}
 
         {loading ? (
-          <div
-            role="status"
-            aria-live="polite"
+          <LoadingIndicator
+            label="Loading assessment form..."
             className="rounded-[18px] bg-[var(--ed-color-f7f9fb)] py-16 text-center text-sm text-[var(--ed-color-8a98a5)]"
-          >
-            Loading assessment form...
-          </div>
+          />
         ) : (
           <form onSubmit={handleSubmit} aria-busy={saving} className="space-y-8">
             <section>
@@ -687,9 +688,7 @@ export default function AssessmentForm({
               </div>
 
               {loadingStudents ? (
-                <div className="mt-5 rounded-[16px] bg-[var(--ed-color-f7f9fb)] py-12 text-center text-sm text-[var(--ed-color-8a98a5)]">
-                  Loading enrolled students...
-                </div>
+                <LoadingIndicator label="Loading enrolled students..." className="mt-5 rounded-[16px] bg-[var(--ed-color-f7f9fb)] py-12" />
               ) : (
                 <div className="mt-5 overflow-x-auto rounded-[18px] border border-[var(--ed-color-e3e9ee)]">
                   <table className="w-full min-w-[650px]">

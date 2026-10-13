@@ -9,7 +9,7 @@ const STEPS = [
     page: "Dashboard",
     description: "Follow this guide to set up your class and turn assessment results into learning support.",
     instructions: [
-      "Use the navigation on the left to open each part of the system. Select the EL button to expand or collapse it.",
+      "On a phone, use the bottom buttons for Dashboard, Records, and AI Insights. Select View all to open the full navigation list. On larger screens, use the navigation on the left and select the EduLITE logo button to expand or collapse it.",
       "Choose or create the school year in Settings first, then set up Sections and Subjects, register students, create assessments, and review results.",
       "Use section, subject, and term filters to focus on the class and grading period you want to review.",
     ],

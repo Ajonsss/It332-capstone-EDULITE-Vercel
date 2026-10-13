@@ -11,6 +11,10 @@ import ValidatedInput from "./ValidatedInput";
 import { parseWholeNumber, validateInput } from "../../../shared/inputValidation.mjs";
 import AssessmentForm from "./AssessmentForm";
 import RecordPerformanceSummary from "./RecordPerformanceSummary";
+import MobileNavigation from "./MobileNavigation";
+import LoadingIndicator from "./LoadingIndicator";
+import { NAVIGATION_ITEMS, isNavigationItemActive } from "../utils/navigation.js";
+import { usePageTitle } from "../utils/usePageTitle.js";
 import { buildPerformanceRoster, getPerformanceStatus, hasPerformanceGrade, PERFORMANCE_LEVELS } from "../utils/performance";
 
 import { API_URL } from "../utils/api.js";
@@ -217,6 +221,8 @@ export default function Dashboard() {
               "Update the assessment and student scores without leaving the dashboard.",
           }
         : (PAGE_DETAILS[activeView] ?? PAGE_DETAILS.dashboard);
+
+  usePageTitle(NAVIGATION_ITEMS.find((item) => item.view === activeView)?.label ?? pageDetails.title);
 
   useEffect(() => {
     localStorage.setItem("eduliteSidebarCollapsed", String(sidebarCollapsed));
@@ -1255,11 +1261,11 @@ export default function Dashboard() {
 
       <aside
         aria-label="EduLITE navigation"
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] transition-[width] duration-200 ${
+        className={`edulite-navigation fixed inset-y-0 left-0 z-50 flex flex-col border-r border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] transition-[width] duration-200 ${
           sidebarCollapsed ? "w-[68px]" : "w-[220px]"
         }`}
       >
-        <div className="flex h-[76px] items-center border-b border-[var(--ed-color-eef2f5)] px-3">
+        <div className="edulite-navigation-brand flex h-[76px] items-center border-b border-[var(--ed-color-eef2f5)] px-3">
           <button
             type="button"
             onClick={() => setSidebarCollapsed((current) => !current)}
@@ -1268,8 +1274,8 @@ export default function Dashboard() {
             }`}
             aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[var(--ed-primary)] text-lg font-black text-white">
-              EL
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[12px] border border-[var(--ed-border)] bg-white">
+              <img src="/ELogo.png" alt="EduLITE logo" className="h-9 w-9 object-contain" />
             </div>
 
             {!sidebarCollapsed && (
@@ -1285,82 +1291,22 @@ export default function Dashboard() {
           </button>
         </div>
 
-        <nav className="minimal-scrollbar flex-1 overflow-y-auto px-2 py-4">
-          <div className="space-y-1.5">
-            <SidebarButton
-              active={activeView === "dashboard"}
-              label="Dashboard"
-              icon="dashboard"
-              collapsed={sidebarCollapsed}
-              onClick={() => openView("dashboard")}
-            />
-            <SidebarButton
-              active={activeView === "sections"}
-              label="Sections"
-              icon="category"
-              collapsed={sidebarCollapsed}
-              onClick={() => openView("sections")}
-            />
-            <SidebarButton
-              active={activeView === "subjects"}
-              label="Subjects"
-              icon="menu_book"
-              collapsed={sidebarCollapsed}
-              onClick={() => openView("subjects")}
-            />
-            <SidebarButton
-              active={activeView === "students" || activeView === "studentForm"}
-              label="Students"
-              icon="groups"
-              collapsed={sidebarCollapsed}
-              onClick={() => openView("students")}
-            />
-            <SidebarButton
-              active={activeView === "assessments" || activeView === "assessmentForm"}
-              label="Assessments"
-              icon="assignment"
-              collapsed={sidebarCollapsed}
-              onClick={() => openView("assessments")}
-            />
-            <SidebarButton
-              active={activeView === "records"}
-              label="Records"
-              icon="table_view"
-              collapsed={sidebarCollapsed}
-              onClick={() => openView("records")}
-            />
-            <SidebarButton
-              active={activeView === "interventions"}
-              label="Interventions"
-              icon="intervention"
-              collapsed={sidebarCollapsed}
-              onClick={() => openView("interventions")}
-            />
-            <SidebarButton
-              active={activeView === "yearEnd"}
-              label="Year-End & Archives"
-              icon="archive"
-              collapsed={sidebarCollapsed}
-              onClick={() => openView("yearEnd")}
-            />
-            <SidebarButton
-              active={activeView === "awards"}
-              label="Awards"
-              icon="workspace_premium"
-              collapsed={sidebarCollapsed}
-              onClick={() => openView("awards")}
-            />
-            <SidebarButton
-              active={activeView === "aiInsights"}
-              label="AI Insights"
-              icon="auto_awesome"
-              collapsed={sidebarCollapsed}
-              onClick={() => openView("aiInsights")}
-            />
+        <nav aria-label="Main navigation" className="edulite-navigation-main minimal-scrollbar flex-1 overflow-y-auto px-2 py-4">
+          <div className="edulite-navigation-links space-y-1.5">
+            {NAVIGATION_ITEMS.map((item) => (
+              <SidebarButton
+                key={item.view}
+                active={isNavigationItemActive(item, activeView)}
+                label={item.label}
+                icon={item.icon}
+                collapsed={sidebarCollapsed}
+                onClick={() => openView(item.view)}
+              />
+            ))}
           </div>
         </nav>
 
-        <div className="space-y-2 border-t border-[var(--ed-color-eef2f5)] p-3">
+        <div className="edulite-navigation-account space-y-2 border-t border-[var(--ed-color-eef2f5)] p-3">
           <SidebarButton
             active={activeView === "settings"}
             label="Settings"
@@ -1379,8 +1325,10 @@ export default function Dashboard() {
         </div>
       </aside>
 
+      <MobileNavigation activeView={activeView} onNavigate={openView} onLogout={handleLogout} />
+
       <div
-        className={`min-h-screen transition-[padding] duration-200 ${
+        className={`edulite-content min-h-screen transition-[padding] duration-200 ${
           sidebarCollapsed ? "pl-[68px]" : "pl-[68px] lg:pl-[220px]"
         }`}
       >
@@ -1402,8 +1350,7 @@ export default function Dashboard() {
         <main className="mx-auto w-full max-w-[1560px] px-5 pb-12 pt-7 sm:px-8 lg:px-10">
           {loading ? (
             <div className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] px-8 py-16 text-center">
-              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-[3px] border-[var(--ed-color-dceaf2)] border-t-[var(--ed-primary)]" />
-              <p className="mt-4 text-sm text-[var(--ed-color-71808d)]">Loading EduLITE...</p>
+              <LoadingIndicator label="Loading EduLITE..." />
             </div>
           ) : (
             <>
@@ -1667,10 +1614,10 @@ function MacNotificationCenter({ toasts, onDismiss }) {
             <div className="flex gap-3 p-4">
               <div
                 className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] text-sm font-bold text-white ${
-                  isError ? "bg-[#ff4d4f]" : "bg-[var(--ed-primary)]"
+                  isError ? "bg-[#ff4d4f]" : "border border-[var(--ed-border)] bg-white"
                 }`}
               >
-                {isError ? "!" : "EL"}
+                {isError ? "!" : <img src="/ELogo.png" alt="" className="h-7 w-7 object-contain" />}
               </div>
 
               <div className="min-w-0 flex-1">
@@ -2005,7 +1952,7 @@ function PriorityStudent({
             disabled={Boolean(generatingKey)}
             className="shrink-0 rounded-[11px] bg-[var(--ed-primary)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--ed-primary-hover)] disabled:opacity-50"
           >
-            {isGenerating ? "Generating..." : "Generate"}
+            {isGenerating ? <LoadingIndicator compact label="Generating..." /> : "Generate"}
           </button>
         </div>
       ) : (
@@ -2961,7 +2908,7 @@ function SavedInsightsPanel({ student, insights, loading, error, openSavedInsigh
       </div>
 
       {loading ? (
-        <p className="mt-6 rounded-[16px] bg-[var(--ed-color-f8fafb)] p-8 text-center text-sm text-[var(--ed-color-8a98a5)]">Loading insights...</p>
+        <LoadingIndicator label="Loading insights..." className="mt-6 rounded-[16px] bg-[var(--ed-color-f8fafb)] p-8" />
       ) : error ? (
         <p className="mt-6 rounded-[16px] bg-[var(--ed-color-fff1f1)] p-5 text-sm text-[var(--ed-color-c53939)]">{error}</p>
       ) : insights.length === 0 ? (
@@ -3354,8 +3301,8 @@ function SidebarButton({ active = false, label, icon, collapsed, danger = false,
       aria-label={label}
       aria-current={active ? "page" : undefined}
       title={collapsed ? label : undefined}
-      className={`flex w-full items-center rounded-[12px] px-3 py-2.5 text-sm font-semibold ${
-        collapsed ? "justify-center !px-0" : "gap-3"
+      className={`edulite-navigation-button flex w-full items-center rounded-[12px] px-3 py-2.5 text-sm font-semibold ${
+        collapsed ? "justify-center [&]:px-0" : "gap-3"
       } ${description ? "min-h-14 border border-[var(--ed-border)] bg-[var(--ed-subtle)]" : ""} ${
         active
           ? "bg-[var(--ed-color-eaf6fc)] text-[var(--ed-color-168cc8)]"
@@ -3372,8 +3319,8 @@ function SidebarButton({ active = false, label, icon, collapsed, danger = false,
           <path strokeLinecap="round" strokeLinejoin="round" d="m8 12-2 9 6-3 6 3-2-9M12 5.5v5M9.5 8h5" />
         </svg>
       ) : <span className="material-symbols-rounded shrink-0 text-[21px]" aria-hidden="true">{icon}</span>}
-      {!collapsed && <span className="min-w-0 text-left"><span className="block truncate">{label}</span>{description && <span className="mt-0.5 block text-[11px] font-normal text-[var(--ed-muted)]">{description}</span>}</span>}
-      {!collapsed && description && <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ml-auto h-4 w-4 shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="m9 5 7 7-7 7" /></svg>}
+      <span className={`edulite-navigation-label min-w-0 text-left ${collapsed ? "hidden" : ""}`}><span className="block truncate">{label}</span>{description && <span className="edulite-navigation-description mt-0.5 block text-[11px] font-normal text-[var(--ed-muted)]">{description}</span>}</span>
+      {!collapsed && description && <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="edulite-navigation-chevron ml-auto h-4 w-4 shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="m9 5 7 7-7 7" /></svg>}
     </button>
   );
 }
@@ -3411,7 +3358,7 @@ function InsightList({
                 disabled={Boolean(generatingRecommendationKey)}
                 className="shrink-0 rounded-[11px] bg-[var(--ed-primary)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--ed-primary-hover)] disabled:opacity-50"
               >
-                {isGenerating ? "Generating..." : "Generate"}
+                {isGenerating ? <LoadingIndicator compact label="Generating..." /> : "Generate"}
               </button>
             </div>
           );

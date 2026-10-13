@@ -4,9 +4,11 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import axios from "axios";
 import ValidatedInput from "./ValidatedInput";
+import LoadingIndicator from "./LoadingIndicator";
 import { parseWholeNumber, validateInput } from "../../../shared/inputValidation.mjs";
 
 import { API_URL } from "../utils/api.js";
+import { usePageTitle } from "../utils/usePageTitle.js";
 
 const APPLE_FONT =
   '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
@@ -67,6 +69,8 @@ export default function StudentForm({
   const resolvedStudentId = studentId ?? params.id ?? null;
 
   const isEditing = Boolean(resolvedStudentId);
+
+  usePageTitle(isEditing ? "Edit Student" : "Register Student", !embedded);
 
   useEffect(() => {
     const token = localStorage.getItem("eduliteToken");
@@ -305,13 +309,10 @@ export default function StudentForm({
         )}
 
         {loading ? (
-          <div
-            role="status"
-            aria-live="polite"
+          <LoadingIndicator
+            label="Loading student form..."
             className="rounded-[18px] bg-[var(--ed-color-f7f9fb)] py-16 text-center text-sm text-[var(--ed-color-8a98a5)]"
-          >
-            Loading student form...
-          </div>
+          />
         ) : (
           <form onSubmit={handleSubmit} aria-busy={saving} className="space-y-8">
             <section>

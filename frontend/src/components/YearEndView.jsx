@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import axios from "axios";
+import LoadingIndicator from "./LoadingIndicator";
 
 import { API_URL as API } from "../utils/api.js";
 const fieldClass = "mt-1 w-full rounded-xl border border-[var(--ed-border)] bg-[var(--ed-surface)] px-3 py-2.5";
@@ -81,7 +82,7 @@ export default function YearEndView({ onFinished, onOpenInsight }) {
     {error && <p role="alert" className="rounded-xl bg-[var(--ed-danger-soft)] p-4 text-[var(--ed-danger)]">{error}</p>}
     {message && <p role="status" className="rounded-xl bg-[var(--ed-accent-soft)] p-4">{message}</p>}
     {printReport && createPortal(<div className="year-end-print-root"><PrintableYearEnd report={printReport} /></div>, document.body)}
-    {loading ? <p>Loading year-end records…</p> : <>
+    {loading ? <LoadingIndicator label="Loading year-end records…" className="py-8" /> : <>
       <div className="flex flex-wrap gap-3">
         {tab === "review" && <button type="button" disabled={!matching.length} className="rounded-xl border border-[var(--ed-border)] px-4 py-2 text-sm" onClick={() => { flushSync(() => setPrintReport({ type: "class", students: matching, title: "Year-end class report", schoolYear: activeYearName })); window.print(); }}>Print class report / save PDF</button>}
         <input type="search" aria-label="Search year-end students" placeholder="Search name, section, grade, or school year" className={`${fieldClass} max-w-md`} value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -113,7 +114,7 @@ export default function YearEndView({ onFinished, onOpenInsight }) {
           <button type="submit" disabled={saving} className="rounded-xl bg-[var(--ed-primary)] px-5 py-3 font-semibold text-white disabled:opacity-50">{saving ? "Archiving…" : `Finish & archive ${selected.name}`}</button>
         </form>}
       </section>}
-      {tab === "archives" && archiveLoading && <p>Loading archived record…</p>}
+      {tab === "archives" && archiveLoading && <LoadingIndicator label="Loading archived record…" className="py-8" />}
       {tab === "archives" && archive && !archiveLoading && <section className="rounded-[22px] border border-[var(--ed-border)] bg-[var(--ed-surface)] p-6">
         <YearEndDetails student={archive} />
         <div className="mt-4 flex flex-wrap gap-3"><button type="button" className="rounded-xl border border-[var(--ed-border)] px-4 py-2 text-sm" onClick={() => { flushSync(() => setPrintReport({ type: "individual", students: [archive], title: "Archived year-end report", schoolYear: archive.schoolYear })); window.print(); }}>Print archived report / save PDF</button><button type="button" disabled={saving} className="rounded-xl border border-[var(--ed-border)] px-4 py-2 text-sm" onClick={async () => {

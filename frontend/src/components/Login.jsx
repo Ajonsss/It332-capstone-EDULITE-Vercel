@@ -1,4 +1,5 @@
 import PasswordRecovery from "./PasswordRecovery";
+import LoadingIndicator from "./LoadingIndicator";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -6,6 +7,7 @@ import ValidatedInput from "./ValidatedInput";
 import { validateInput } from "../../../shared/inputValidation.mjs";
 
 import { API_URL } from "../utils/api.js";
+import { usePageTitle } from "../utils/usePageTitle.js";
 
 const APPLE_FONT =
   '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
@@ -19,6 +21,8 @@ export default function Login() {
   const [error, setError] = useState("");
   const [errorVisible, setErrorVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  usePageTitle(showRecovery ? "Recover Account" : isLoginMode ? "Sign In" : "Create Account");
 
   const navigate = useNavigate();
 
@@ -321,13 +325,13 @@ export default function Login() {
           className="pointer-events-none absolute right-[-180px] top-[-220px] h-[520px] w-[520px] rounded-full bg-[#0091ff]/8 blur-3xl"
         />
 
-        <div className="mx-auto grid min-h-screen w-full max-w-[1500px] grid-cols-1 lg:grid-cols-[1.08fr_0.92fr]">
+        <div className="mx-auto grid min-h-screen w-full max-w-[1500px] grid-cols-1 content-start md:content-normal lg:grid-cols-[1.08fr_0.92fr]">
           {/* LEFT SIDE */}
-          <section className="relative flex min-h-[44vh] flex-col justify-between px-6 pb-10 pt-7 sm:px-10 sm:pb-14 sm:pt-10 lg:min-h-screen lg:px-16 lg:py-14 xl:px-24">
+          <section className="relative flex min-h-0 flex-col justify-between px-6 pb-4 pt-5 sm:px-10 md:min-h-[44vh] md:pb-14 md:pt-10 lg:min-h-screen lg:px-16 lg:py-14 xl:px-24">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-[14px] border border-[var(--ed-color-e5e5ea)] bg-[var(--ed-surface)]">
+              <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-[14px] border border-[var(--ed-color-e5e5ea)] bg-white">
                 <img
-                  src="/logo.png"
+                  src="/ELogo.png"
                   alt="EduLITE logo"
                   className="h-9 w-9 object-contain"
                 />
@@ -344,7 +348,7 @@ export default function Login() {
               </div>
             </div>
 
-            <div className="max-w-[720px] py-12 lg:py-0">
+            <div className="hidden max-w-[720px] py-12 md:block lg:py-0">
               <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[var(--ed-color-0091ff)]">
                 Student Learning Workspace
               </p>
@@ -376,9 +380,9 @@ export default function Login() {
           </section>
 
           {/* RIGHT SIDE */}
-          <section className="flex items-center border-t border-[var(--ed-color-eceff2)] bg-[var(--ed-color-fafbfc)] px-6 py-10 sm:px-10 lg:min-h-screen lg:border-l lg:border-t-0 lg:px-14 xl:px-20">
+          <section className="flex items-center border-t border-[var(--ed-color-eceff2)] bg-[var(--ed-color-fafbfc)] px-6 py-6 sm:px-10 md:py-10 lg:min-h-screen lg:border-l lg:border-t-0 lg:px-14 xl:px-20">
             <div className="login-form-enter mx-auto w-full max-w-[460px]">
-              <div className="mb-10">
+              <div className="mb-6 md:mb-10">
                 <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-color-0091ff)]">
                   {isLoginMode
                     ? "Welcome Back"
@@ -545,9 +549,7 @@ export default function Login() {
                   className="mt-2 w-full rounded-[15px] bg-[#0091ff] px-5 py-3.5 text-sm font-semibold text-white hover:bg-[#007aff] disabled:cursor-not-allowed disabled:bg-[var(--ed-color-c7c7cc)]"
                 >
                   {submitting
-                    ? isLoginMode
-                      ? "Signing in..."
-                      : "Creating account..."
+                    ? <LoadingIndicator compact label={isLoginMode ? "Signing in..." : "Creating account..."} />
                     : isLoginMode
                       ? "Sign In"
                       : "Create Account"}
@@ -577,7 +579,7 @@ export default function Login() {
                 </button>
               </p>
 
-              <p className="mt-12 text-[11px] leading-5 text-[var(--ed-color-a1a1a6)]">
+              <p className="mt-6 text-[11px] leading-5 text-[var(--ed-color-a1a1a6)] md:mt-12">
                 EduLITE · Student
                 performance and
                 learning-support
