@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import axios from "axios";
 
-const API_URL = "http://localhost:3000";
+import { API_URL } from "../utils/api.js";
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 export default function StudentImport({ subjects, onImported }) {

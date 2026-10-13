@@ -13,7 +13,7 @@ import AssessmentForm from "./AssessmentForm";
 import RecordPerformanceSummary from "./RecordPerformanceSummary";
 import { buildPerformanceRoster, getPerformanceStatus, hasPerformanceGrade, PERFORMANCE_LEVELS } from "../utils/performance";
 
-const API_URL = "http://localhost:3000";
+import { API_URL } from "../utils/api.js";
 
 const PAGE_DETAILS = {
   interventions: { title: "Intervention Progress", description: "Assign practice activities and track completion and learning gains." },
@@ -691,7 +691,7 @@ export default function Dashboard() {
 
     try {
       const response = await axios.post(
-        `${API_URL}/api/gemini/student-support/${student.id}`,
+        `${API_URL}/gemini/student-support/${student.id}`,
         {
           support_type: supportType,
           focus_subject_id: selectedSubjectId,
@@ -790,7 +790,7 @@ export default function Dashboard() {
 
     try {
       const response = await axios.get(
-        `${API_URL}/api/students/${studentId}/insights`,
+        `${API_URL}/students/${studentId}/insights`,
       );
 
       setStudentInsightsById((current) => ({
@@ -3431,7 +3431,7 @@ function AiRecommendationModal({ recommendation, error, closeModal, onAssignActi
     if (pdfBusy) return;
     setPdfBusy(true); setPdfError("");
     try {
-      const response = await axios.get(`${API_URL}${recommendation.savedInsight.pdfUrl}`, { responseType: "blob" });
+      const response = await axios.get(recommendation.savedInsight.pdfUrl, { responseType: "blob" });
       const url = URL.createObjectURL(response.data); const link = document.createElement("a"); link.href = url; link.download = `${recommendation.student?.name ?? "student"}-learning-insight.pdf`; link.click(); URL.revokeObjectURL(url);
     } catch { setPdfError("Unable to download this insight. Please try again."); }
     finally { setPdfBusy(false); }

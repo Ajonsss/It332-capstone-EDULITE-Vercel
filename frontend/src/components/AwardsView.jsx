@@ -1,3 +1,4 @@
+import { API_URL } from "../utils/api.js";
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { createPortal } from "react-dom";
@@ -27,7 +28,7 @@ export default function AwardsView({ students, sections, subjects, gradeSummarie
   useEffect(() => {
     if (!persistHistory) return;
     let mounted = true;
-    axios.get("http://localhost:3000/award-history").then((response) => { if (mounted) setHistory(response.data); }).catch(() => { if (mounted) setError("Unable to load award history."); });
+    axios.get(`${API_URL}/award-history`).then((response) => { if (mounted) setHistory(response.data); }).catch(() => { if (mounted) setError("Unable to load award history."); });
     return () => { mounted = false; };
   }, [persistHistory]);
   const candidates = useMemo(() => buildAwardCandidates(students, gradeSummaries, { section, subjectId, term, awardType, minimum }), [students, gradeSummaries, section, subjectId, term, awardType, minimum]);
@@ -41,7 +42,7 @@ export default function AwardsView({ students, sections, subjects, gradeSummarie
     if (persistHistory) {
       setSaving(true); setError("");
       try {
-        const response = await axios.post("http://localhost:3000/award-history", { studentIds: recipients.map((student) => student.id), term: Number(term), awardType, minimum: Number(minimum), subjectId, school, title, schoolYear, signatory, role, date });
+        const response = await axios.post(`${API_URL}/award-history`, { studentIds: recipients.map((student) => student.id), term: Number(term), awardType, minimum: Number(minimum), subjectId, school, title, schoolYear, signatory, role, date });
         setCertificates(response.data.map((item) => item.certificate));
         setHistory((current) => [...response.data, ...current]);
       } catch (err) { setError(err.response?.data?.message || "Unable to save certificates. Please review the grades and try again."); }

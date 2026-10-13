@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import axios from "axios";
 
-const API = "http://localhost:3000";
+import { API_URL as API } from "../utils/api.js";
 const fieldClass = "mt-1 w-full rounded-xl border border-[var(--ed-border)] bg-[var(--ed-surface)] px-3 py-2.5";
 const outcomes = { promoted: "Promoted", graduated: "Graduated", intervention: "Further intervention" };
 const grade = (value) => typeof value === "number" && Number.isFinite(value) ? value.toFixed(2) : "Pending";

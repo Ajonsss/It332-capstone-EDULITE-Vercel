@@ -4,12 +4,14 @@ mongoose.set("bufferCommands", false);
 mongoose.set("autoCreate", false);
 mongoose.set("autoIndex", false);
 
+let connectionPromise;
+
 export async function connectMongoDatabase() {
   const mongoUri = process.env.MONGODB_URI;
 
   if (!mongoUri) {
     throw new Error(
-      "MONGODB_URI is missing from the backend .env file.",
+      "MONGODB_URI is missing from the environment.",
     );
   }
 
@@ -20,13 +22,16 @@ export async function connectMongoDatabase() {
     return mongoose.connection;
   }
 
-  if (mongoose.connection.readyState !== 0) {
-    await mongoose.disconnect();
+  if (!connectionPromise) {
+    // Share an in-flight connection instead of disconnecting another request.
+    connectionPromise = mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 10000,
+    }).finally(() => {
+      connectionPromise = undefined;
+    });
   }
 
-  await mongoose.connect(mongoUri, {
-    serverSelectionTimeoutMS: 10000,
-  });
+  await connectionPromise;
 
   if (
     mongoose.connection.readyState !== 1 ||

@@ -1,4 +1,6 @@
 import dotenv from "dotenv";
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
 dotenv.config();
 
@@ -27,19 +29,49 @@ import geminiRoute from "./geminiRoute.js";
 import { validateRequestInputs } from "./middleware/inputValidation.js";
 
 const app = express();
+const api = express.Router();
 
 const PORT =
   Number(process.env.PORT) || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: "25mb" }));
-app.use(validateRequestInputs);
 
-app.get("/", (req, res) => {
+api.get("/", (req, res) => {
   res.json({
     message: "EduLITE API is running.",
     database: "MongoDB Atlas",
   });
+});
+
+// Validate the route-relative path after Express removes the /api mount.
+api.use(validateRequestInputs);
+
+// Connect at request time so Vercel can import the app without opening a
+// database connection during its build. Concurrent requests share startup.
+let databaseInitialization;
+function initializeDatabase() {
+  if (!databaseInitialization) {
+    databaseInitialization = (async () => {
+      await connectMongoDatabase();
+      await Promise.all([SchoolYear, Intervention, AwardCertificate, AuditEvent].map((Model) => Model.createIndexes()));
+    })().catch((error) => {
+      databaseInitialization = undefined;
+      throw error;
+    });
+  }
+  return databaseInitialization;
+}
+
+api.use(async (req, res, next) => {
+  try {
+    await initializeDatabase();
+    // Reconnect after a disconnected warm function instance, if necessary.
+    await connectMongoDatabase();
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
 
 /*
@@ -51,16 +83,17 @@ app.get("/", (req, res) => {
   Those duplicate routes will be removed
   when student.js is converted.
 */
-app.use(accountRoutes);
-app.use(teacherToolsRoutes);
-app.use(loginRoutes);
-app.use(sectionRoutes);
-app.use(studentLifecycleRoutes);
-app.use(studentRoutes);
-app.use(studentImportRoutes);
-app.use(subjectRoutes);
-app.use(assessmentRoutes);
-app.use(geminiRoute);
+api.use(accountRoutes);
+api.use(teacherToolsRoutes);
+api.use(loginRoutes);
+api.use(sectionRoutes);
+api.use(studentLifecycleRoutes);
+api.use(studentRoutes);
+api.use(studentImportRoutes);
+api.use(subjectRoutes);
+api.use(assessmentRoutes);
+api.use(geminiRoute);
+app.use("/api", api);
 
 app.use((req, res) => {
   res.status(404).json({
@@ -93,12 +126,11 @@ app.use(
 
 async function startServer() {
   try {
-    await connectMongoDatabase();
-    await Promise.all([SchoolYear, Intervention, AwardCertificate, AuditEvent].map((Model) => Model.createIndexes()));
+    await initializeDatabase();
 
     app.listen(PORT, () => {
       console.log(
-        `EduLITE API running at http://localhost:${PORT}`,
+        `EduLITE API running at http://localhost:${PORT}/api`,
       );
     });
   } catch (error) {
@@ -128,12 +160,11 @@ async function shutdown(signal) {
   }
 }
 
-process.on("SIGINT", () => {
-  shutdown("SIGINT");
-});
+// Vercel imports the default export; npm start still runs a local listener.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  startServer();
+}
 
-process.on("SIGTERM", () => {
-  shutdown("SIGTERM");
-});
-
-startServer();
+export default app;

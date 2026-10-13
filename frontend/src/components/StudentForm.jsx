@@ -6,7 +6,7 @@ import axios from "axios";
 import ValidatedInput from "./ValidatedInput";
 import { parseWholeNumber, validateInput } from "../../../shared/inputValidation.mjs";
 
-const API_URL = "http://localhost:3000";
+import { API_URL } from "../utils/api.js";
 
 const APPLE_FONT =
   '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';

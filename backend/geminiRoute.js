@@ -2,7 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import PDFDocument from "pdfkit";
 
-import ai from "./gemini.js";
+import getGeminiClient from "./gemini.js";
 import { validateInterventionPlan } from "./utils/interventionPlan.js";
 import { requireAuth } from "./middleware/auth.js";
 
@@ -849,7 +849,7 @@ function formatSavedInsight(insight) {
 // ===================================
 
 router.get(
-  "/api/students/:studentId/insights",
+  "/students/:studentId/insights",
   requireAuth,
   async (req, res) => {
     if (!isValidId(req.params.studentId)) {
@@ -902,7 +902,7 @@ router.get(
 // ===================================
 
 router.get(
-  "/api/gemini/insights/:insightId/pdf",
+  "/gemini/insights/:insightId/pdf",
   requireAuth,
   async (req, res) => {
     if (!isValidId(req.params.insightId)) {
@@ -964,7 +964,7 @@ router.get(
 // ===================================
 
 router.get(
-  "/api/gemini/status",
+  "/gemini/status",
   requireAuth,
   (req, res) => {
     try {
@@ -989,7 +989,7 @@ router.get(
 // ===================================
 
 router.post(
-  "/api/gemini/student-support/:studentId",
+  "/gemini/student-support/:studentId",
   requireAuth,
   async (req, res) => {
     try {
@@ -1475,7 +1475,7 @@ router.post(
         ),
       };
 
-      const geminiResponse = await ai.models.generateContent({
+      const geminiResponse = await getGeminiClient().models.generateContent({
         model,
 
         contents: buildPrompt({

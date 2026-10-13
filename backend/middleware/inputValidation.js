@@ -10,7 +10,7 @@ export function validateRequestInputs(req, res, next) {
   const path = req.path.replace(/\/+$/, "").toLowerCase();
   const fields = {};
   const body = req.body;
-  const known = /^\/(register|login|students(?:\/[^/]+(?:\/assessment-scores)?)?|sections|subjects(?:\/[^/]+)?|assessments(?:\/[^/]+(?:\/scores\/[^/]+)?)?|api\/gemini\/student-support\/[^/]+)$/.test(path);
+  const known = /^\/(register|login|students(?:\/[^/]+(?:\/assessment-scores)?)?|sections|subjects(?:\/[^/]+)?|assessments(?:\/[^/]+(?:\/scores\/[^/]+)?)?|(?:api\/)?gemini\/student-support\/[^/]+)$/.test(path);
   // The multipart import validates its workbook after upload middleware.
   if (!known || path === "/students/import") return next();
   if (!body || typeof body !== "object" || Array.isArray(body)) return res.status(400).json({ message: "Submit the form fields as an object." });
@@ -71,7 +71,7 @@ export function validateRequestInputs(req, res, next) {
     check("date", { kind: "date", label: "Assessment date" });
     id("subject_id", "subject");
     scores("student_id", parseWholeNumber(body.total_items));
-  } else if (/^\/api\/gemini\/student-support\/[^/]+$/.test(path)) {
+  } else if (/^\/(?:api\/)?gemini\/student-support\/[^/]+$/.test(path)) {
     check("term", { kind: "integer", label: "Term", min: 1, max: 3 });
     if (!["intervention", "enrichment"].includes(body.support_type)) fields.support_type = "Select intervention or enrichment.";
     if (body.focus_subject_id != null && body.focus_subject_id !== "") id("focus_subject_id", "focus subject");
