@@ -2974,6 +2974,22 @@ export function getSupportClassification(
 export function calculateTermGrade(
   records,
   term,
+  importedGrade = null,
+) {
+  const result = calculateAssessmentTermGrade(records, term);
+  // Existing official grades are already on the final 0-100 scale. Never
+  // transmute them again or fabricate assessment scores from them.
+  if (!TERM_NUMBERS.includes(Number(term)) || result.isFullyComplete || typeof importedGrade !== "number" || !Number.isFinite(importedGrade) || importedGrade < 0 || importedGrade > 100) return result;
+  return { ...result, source: "imported", status: "IMPORTED", termGradeStatus: "IMPORTED",
+    isComplete: true, isFullyComplete: true, isCalculable: true, hasTermGrade: true,
+    assessmentDataComplete: result.isFullyComplete, initialGrade: null, runningInitialGrade: null,
+    termGrade: importedGrade, descriptor: getGradeDescriptor(importedGrade),
+    remark: getGradeRemark(importedGrade), supportClassification: getSupportClassification(importedGrade) };
+}
+
+function calculateAssessmentTermGrade(
+  records,
+  term,
 ) {
   const numericTerm =
     Number(term);
@@ -3343,24 +3359,28 @@ export function calculateTermGrade(
 
 export function calculateAllTerms(
   records,
+  imported = {},
 ) {
   return {
     term1:
       calculateTermGrade(
         records,
         1,
+        imported.term1,
       ),
 
     term2:
       calculateTermGrade(
         records,
         2,
+        imported.term2,
       ),
 
     term3:
       calculateTermGrade(
         records,
         3,
+        imported.term3,
       ),
   };
 }
@@ -3566,10 +3586,12 @@ export function calculateFinalGrade(
 
 export function calculateStudentSubjectGrade(
   records,
+  imported = {},
 ) {
   const terms =
     calculateAllTerms(
       records,
+      imported,
     );
 
   /*

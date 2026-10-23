@@ -6,6 +6,7 @@
   src: url('/fonts/edulite-font.ttf') format('truetype');
   font-weight: 400; /* Use 400 for normal, 700 for bold */
   font-style: normal;
+  font-display: swap;
 }
 
 /* 2. Apply it globally to your dashboard and login */

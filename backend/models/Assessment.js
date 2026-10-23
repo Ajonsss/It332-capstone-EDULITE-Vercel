@@ -263,6 +263,15 @@ const assessmentSchema =
         maxlength: [5000, "Budget of Work must be at most 5000 characters."],
       },
 
+      // Null preserves subject-wide behavior for assessments created before section selection.
+      classSections: {
+        type: [new mongoose.Schema({
+          grade: { type: Number, required: true, min: 1, validate: Number.isSafeInteger },
+          sectionId: { type: mongoose.Schema.Types.ObjectId, ref: "Section", required: true },
+        }, { _id: false })],
+        default: null,
+      },
+
       subjectId: {
         type:
           mongoose.Schema.Types.ObjectId,

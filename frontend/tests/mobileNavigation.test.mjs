@@ -46,8 +46,8 @@ test("phone dock exposes three shortcuts and an accessible full navigation list"
   assert.equal(selections.at(-1), "aiInsights");
 
   const destinations = [
-    ["Dashboard", "dashboard"], ["Sections", "sections"], ["Subjects", "subjects"],
-    ["Students", "students"], ["Assessments", "assessments"], ["Records", "records"],
+    ["Dashboard", "dashboard"], ["Manage your class", "manageClass"],
+    ["Assessments", "assessments"], ["Records", "records"],
     ["Interventions", "interventions"], ["Year-End & Archives", "yearEnd"],
     ["Awards", "awards"], ["AI Insights", "aiInsights"], ["Settings", "settings"],
   ];
@@ -55,7 +55,7 @@ test("phone dock exposes three shortcuts and an accessible full navigation list"
     await click(toggle());
     assert.equal(toggle().getAttribute("aria-expanded"), "true");
     assert.ok(document.getElementById(toggle().getAttribute("aria-controls")));
-    assert.equal(menu().querySelectorAll("button").length, 12);
+    assert.equal(menu().querySelectorAll("button").length, 10);
     const item = [...menu().querySelectorAll("button")].find((button) => button.textContent === label);
     assert.ok(item, `${label} is reachable from View all`);
     await click(item);

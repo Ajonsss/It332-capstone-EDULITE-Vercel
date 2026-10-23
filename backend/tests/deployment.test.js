@@ -6,6 +6,7 @@ import SchoolYear from "../models/SchoolYear.js";
 import Intervention from "../models/Intervention.js";
 import AwardCertificate from "../models/AwardCertificate.js";
 import AuditEvent from "../models/AuditEvent.js";
+import ClassOffering from "../models/ClassOffering.js";
 import { connectMongoDatabase } from "../database/mongo.js";
 
 test("Vercel app imports without a listener and serves the public API prefix", { timeout: 10000 }, async (t) => {
@@ -37,7 +38,7 @@ test("Vercel app imports without a listener and serves the public API prefix", {
   const disconnect = t.mock.method(mongoose, "disconnect", async () => {
     throw new Error("A request must not disconnect another request");
   });
-  const indexes = [SchoolYear, Intervention, AwardCertificate, AuditEvent]
+  const indexes = [SchoolYear, Intervention, AwardCertificate, AuditEvent, ClassOffering]
     .map((Model) => t.mock.method(Model, "createIndexes", async () => []));
   const listener = t.mock.method((await import("node:http")).Server.prototype, "listen", () => {
     throw new Error("Importing the app must not start a listener");

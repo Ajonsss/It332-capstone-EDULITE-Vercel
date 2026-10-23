@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 
 import Section from "./models/Section.js";
 import Student from "./models/Student.js";
+import ClassOffering from "./models/ClassOffering.js";
 
 import {
   requireAuth,
@@ -271,6 +272,10 @@ router.delete(
           message:
             `Cannot remove ${section.name} because it still has ${studentCount} student${studentCount === 1 ? "" : "s"}. Move or delete those students first.`,
         });
+      }
+
+      if (await ClassOffering.exists({ ownerId, sectionId: section._id }).setOptions({ acrossSchoolYears: true })) {
+        return res.status(409).json({ message: "This section is used by a registered class. Keep it to preserve the class setup." });
       }
 
       const result =

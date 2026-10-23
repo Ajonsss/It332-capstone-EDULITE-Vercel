@@ -48,6 +48,12 @@ function splitStoredName(name = "") {
 export default function StudentForm({
   embedded = false,
   studentId = null,
+  initialSection = "",
+  initialSubjectId = "",
+  initialGrade = "",
+  lockEnrollment = false,
+  onBusyChange,
+  compact = false,
   onCancel,
   onSaved,
 } = {}) {
@@ -62,6 +68,7 @@ export default function StudentForm({
   const [error, setError] = useState("");
 
   const [saving, setSaving] = useState(false);
+  useEffect(() => { onBusyChange?.(saving); }, [saving, onBusyChange]);
 
   const navigate = useNavigate();
   const params = useParams();
@@ -129,10 +136,13 @@ export default function StudentForm({
           setFormData({
             ...EMPTY_FORM,
 
-            section: loadedSections[0]?.name ?? "",
+            grade: String(initialGrade),
 
-            subject_ids: loadedSubjects[0]?.id
-              ? [String(loadedSubjects[0].id)]
+            section: loadedSections.find((section) => section.name === initialSection)?.name ?? loadedSections[0]?.name ?? "",
+
+            subject_ids: loadedSubjects.some((subject) => String(subject.id) === String(initialSubjectId))
+              ? [String(initialSubjectId)]
+              : loadedSubjects[0]?.id ? [String(loadedSubjects[0].id)]
               : [],
           });
         }
@@ -155,7 +165,7 @@ export default function StudentForm({
     return () => {
       cancelled = true;
     };
-  }, [resolvedStudentId, navigate]);
+  }, [resolvedStudentId, navigate, initialSection, initialSubjectId, initialGrade]);
 
   const updateField = (field, value) => {
     setFormData((current) => ({
@@ -282,13 +292,13 @@ export default function StudentForm({
       aria-labelledby="student-form-title"
       className="overflow-hidden rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)]"
     >
-      <div className="border-b border-[var(--ed-color-eef2f5)] px-6 py-6 sm:px-8 sm:py-7">
+      <div className={`border-b border-[var(--ed-color-eef2f5)] ${compact ? "p-4" : "px-6 py-6 sm:px-8 sm:py-7"}`}>
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">
           Student Details
         </p>
         <h2
           id="student-form-title"
-          className="mt-2 text-3xl font-extrabold tracking-[-0.03em] text-[var(--ed-primary)]"
+          className={`mt-2 ${compact ? "text-xl" : "text-3xl"} font-extrabold tracking-[-0.03em] text-[var(--ed-primary)]`}
         >
           {isEditing ? "Edit Student" : "Register Student"}
         </h2>
@@ -298,7 +308,7 @@ export default function StudentForm({
         </p>
       </div>
 
-      <div className="p-6 sm:p-8">
+      <div className={compact ? "p-4" : "p-6 sm:p-8"}>
         {error && (
           <div
             role="alert"
@@ -323,7 +333,7 @@ export default function StudentForm({
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className={`grid grid-cols-1 gap-4 ${compact ? "" : "md:grid-cols-2"}`}>
                 <TextField
                   id="student-first-name"
                   label="First Name"
@@ -365,7 +375,8 @@ export default function StudentForm({
 
             <div className="h-px bg-[var(--ed-color-eef2f5)]" />
 
-            <section>
+            {lockEnrollment && <p className="rounded-xl bg-[var(--ed-subtle)] p-4 text-sm">Grade {formData.grade} · {formData.section} · {subjects.filter((subject) => formData.subject_ids.includes(String(subject.id))).map((subject) => subject.name).join(", ")}</p>}
+            <section hidden={lockEnrollment}>
               <div className="mb-5">
                 <h3 className="text-xl font-bold text-[var(--ed-color-25313c)]">
                   Academic Information
@@ -375,7 +386,7 @@ export default function StudentForm({
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className={`grid grid-cols-1 gap-4 ${compact ? "" : "md:grid-cols-2"}`}>
                 <div>
                   <FormLabel htmlFor="student-grade" label="Grade" required />
                   <ValidatedInput
@@ -414,7 +425,7 @@ export default function StudentForm({
                   Subjects <span className="text-[var(--ed-color-d94141)]">*</span>
                 </legend>
 
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <div className={`grid grid-cols-1 gap-2 ${compact ? "" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
                   {subjects.map((subject) => {
                     const subjectId = String(subject.id);
                     const selected = formData.subject_ids.map(String).includes(subjectId);

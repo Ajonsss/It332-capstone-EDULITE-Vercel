@@ -12,6 +12,7 @@ import StudentAiInsight from "./models/StudentAiInsight.js";
 import Intervention from "./models/Intervention.js";
 import AwardCertificate from "./models/AwardCertificate.js";
 import AuditEvent from "./models/AuditEvent.js";
+import ClassOffering from "./models/ClassOffering.js";
 import { requireAuth } from "./middleware/auth.js";
 import { DEFAULT_RULES } from "./services/academicContext.js";
 import { validateInput, isCalendarDate } from "../shared/inputValidation.mjs";
@@ -45,7 +46,7 @@ router.post("/school-years", async (req, res) => {
 });
 router.post("/school-years/assign-legacy", async (req, res) => {
   if (!mongoose.isObjectIdOrHexString(req.body?.id) || !await SchoolYear.exists({ _id: req.body.id, ownerId: req.user.id })) return res.status(400).json({ message: "Select a valid school year." });
-  const academicModels = [Student, Assessment, AssessmentScore, StudentAiInsight, Intervention, AwardCertificate];
+  const academicModels = [Student, Assessment, AssessmentScore, StudentAiInsight, Intervention, AwardCertificate, ClassOffering];
   for (const Model of academicModels) if (await Model.exists({ ownerId: req.user.id, schoolYearId: req.body.id }).setOptions({ acrossSchoolYears: true, includeArchived: true })) return res.status(409).json({ message: "Assign legacy records to an empty school year." });
   await mongoose.connection.transaction(async (session) => {
     for (const Model of academicModels) await Model.updateMany({ ownerId: req.user.id, schoolYearId: null }, { $set: { schoolYearId: req.body.id } }, { session, acrossSchoolYears: true, includeArchived: true });
@@ -127,7 +128,7 @@ router.post("/award-history", async (req, res) => {
 });
 router.get("/change-history", async (req, res) => res.json(await AuditEvent.find({ ownerId: req.user.id }).sort({ createdAt: -1 }).limit(200).lean()));
 
-const models = { schoolYears: SchoolYear, sections: Section, subjects: Subject, students: Student, assessments: Assessment, scores: AssessmentScore, insights: StudentAiInsight, interventions: Intervention, awards: AwardCertificate, history: AuditEvent };
+const models = { schoolYears: SchoolYear, sections: Section, subjects: Subject, students: Student, assessments: Assessment, scores: AssessmentScore, insights: StudentAiInsight, interventions: Intervention, awards: AwardCertificate, history: AuditEvent, classes: ClassOffering };
 router.get("/backups", async (req, res) => {
   const collections = {};
   for (const [key, Model] of Object.entries(models)) {
@@ -173,6 +174,7 @@ router.post("/backups/restore", async (req, res) => {
       for (const row of backup.collections[key] ?? []) {
         for (const [ref, type] of Object.entries(references)) if (row[ref] && idTypes.get(row[ref]) !== type) throw new Error(`Missing or invalid backup reference: ${ref}`);
         for (const ref of row.subjectIds ?? []) if (idTypes.get(ref) !== "subjects") throw new Error("Missing subject reference.");
+        for (const entry of row.importedGrades ?? []) if (idTypes.get(entry.subjectId) !== "subjects") throw new Error("Missing subject reference for imported grades.");
         if (key === "schoolYears" && validateRules({ ...DEFAULT_RULES, ...row.rules })) throw new Error("Invalid school-year grading rules.");
         const data = remap(row); data.ownerId = req.user.id; delete data.legacyId;
         if (!["schoolYears", "sections", "subjects", "history"].includes(key) && !data.schoolYearId) data.schoolYearId = legacyYearId;

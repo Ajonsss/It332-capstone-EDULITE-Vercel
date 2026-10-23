@@ -6,53 +6,58 @@ import {
 } from "react-router-dom";
 
 import { useTheme } from "./utils/theme";
-import Login from "./components/Login";
-import Dashboard from "./components/Dashboard";
-import StudentForm from "./components/StudentForm";
-import AssessmentForm from "./components/AssessmentForm";
+import { lazy, Suspense } from "react";
+import LoadingIndicator from "./components/LoadingIndicator";
+
+const Login = lazy(() => import("./components/Login"));
+const Dashboard = lazy(() => import("./components/Dashboard"));
+const StudentForm = lazy(() => import("./components/StudentForm"));
+const AssessmentForm = lazy(() => import("./components/AssessmentForm"));
 
 function App() {
   useTheme();
   return (
     <Router>
-      <Routes>
-        <Route
-          path="/"
-          element={<Login />}
-        />
+      <Suspense fallback={<LoadingIndicator className="min-h-screen" />}>
+        <Routes>
+          <Route
+            path="/"
+            element={<Login />}
+          />
 
-        <Route
-          path="/dashboard"
-          element={<Dashboard />}
-        />
+          <Route
+            path="/dashboard"
+            element={<Dashboard />}
+          />
 
-        <Route
-          path="/student-form"
-          element={<StudentForm />}
-        />
+          <Route
+            path="/student-form"
+            element={<StudentForm />}
+          />
 
-        <Route
-          path="/student-form/:id"
-          element={<StudentForm />}
-        />
+          <Route
+            path="/student-form/:id"
+            element={<StudentForm />}
+          />
 
-        <Route
-          path="/assessment-form"
-          element={<AssessmentForm />}
-        />
+          <Route
+            path="/assessment-form"
+            element={<AssessmentForm />}
+          />
 
-        <Route
-          path="/assessment-form/:id"
-          element={<AssessmentForm />}
-        />
+          <Route
+            path="/assessment-form/:id"
+            element={<AssessmentForm />}
+          />
 
-        <Route
-          path="*"
-          element={
-            <Navigate to="/" />
-          }
-        />
-      </Routes>
+          <Route
+            path="*"
+            element={
+              <Navigate to="/" />
+            }
+          />
+        </Routes>
+      </Suspense>
     </Router>
   );
 }

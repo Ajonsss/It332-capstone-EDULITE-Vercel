@@ -10,6 +10,7 @@ import StudentAiInsight from "./models/StudentAiInsight.js";
 import { requireAuth } from "./middleware/auth.js";
 import { calculateStudentSubjectGrade } from "./utils/grading.js";
 import { classifyYearEnd, validateFinishDecision } from "./utils/yearEnd.js";
+import { assessmentIncludesStudent } from "../shared/assessmentScope.mjs";
 
 const router = express.Router();
 router.use(["/year-end-report", "/students/:id/finish", "/student-archives"], requireAuth);
@@ -24,12 +25,12 @@ export async function buildYearEndReports(ownerId, studentId = null) {
   const scoreMap = new Map(scores.map((score) => [`${score.studentId}:${score.assessmentId}`, score.score]));
   return students.map((student) => {
     const subjectReports = student.subjectIds.map((id) => {
-      const records = assessments.filter((assessment) => String(assessment.subjectId) === String(id)).map((assessment) => ({
+      const records = assessments.filter((assessment) => String(assessment.subjectId) === String(id) && assessmentIncludesStudent(assessment, student)).map((assessment) => ({
         assessmentId: String(assessment._id), name: assessment.name, term: assessment.term, category: assessment.category,
         sequence: assessment.sequence, date: assessment.date, totalItems: assessment.totalItems,
         budgetOfWork: assessment.budgetOfWork ?? "", score: scoreMap.get(`${student._id}:${assessment._id}`) ?? null,
       }));
-      const calculation = calculateStudentSubjectGrade(records);
+      const calculation = calculateStudentSubjectGrade(records, student.importedGrades?.find((entry) => String(entry.subjectId) === String(id)));
       return { id: String(id), name: subjects.find((subject) => String(subject._id) === String(id))?.name ?? "Unavailable subject", terms: calculation.terms, final: calculation.final, assessments: records };
     });
     return { id: String(student._id), name: student.name, grade: student.grade, section: student.sectionId?.name ?? "", subjects: subjectReports, ...classifyYearEnd(subjectReports) };

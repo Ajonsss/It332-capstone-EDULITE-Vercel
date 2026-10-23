@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import Subject from "./models/Subject.js";
 import Student from "./models/Student.js";
 import Assessment from "./models/Assessment.js";
+import ClassOffering from "./models/ClassOffering.js";
 
 import {
   requireAuth,
@@ -468,9 +469,10 @@ router.delete(
         });
       }
 
-      const referenced = await Student.exists({ ownerId, subjectIds: subject._id }).setOptions({ acrossSchoolYears: true, includeArchived: true });
+      const referenced = await Student.exists({ ownerId, $or: [{ subjectIds: subject._id }, { "importedGrades.subjectId": subject._id }] }).setOptions({ acrossSchoolYears: true, includeArchived: true });
       const historicalAssessments = await Assessment.exists({ ownerId, subjectId: subject._id }).setOptions({ acrossSchoolYears: true });
-      if (referenced || historicalAssessments) return res.status(409).json({ message: "This subject is used by enrollments or assessments in a school year or archive. Keep it to preserve those records." });
+      if (referenced || historicalAssessments) return res.status(409).json({ message: "This subject is used by enrollments, imported grades or assessments in a school year or archive. Keep it to preserve those records." });
+      if (await ClassOffering.exists({ ownerId, subjectIds: subject._id }).setOptions({ acrossSchoolYears: true })) return res.status(409).json({ message: "This subject is registered for a class. Keep it to preserve the class setup." });
 
       const {
         studentCount,

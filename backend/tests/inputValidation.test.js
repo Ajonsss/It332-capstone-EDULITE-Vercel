@@ -91,7 +91,7 @@ test("field lengths have exact boundaries and required text cannot be spaces", (
 
 const validId = "507f1f77bcf86cd799439011";
 const student = { name: "Maria Santos", grade: 7, section: "Rose", subject_ids: [validId] };
-const assessment = { name: "Quiz 1", term: 1, category: "written_work", sequence: 1, date: "2026-10-08", total_items: 50, subject_id: validId, scores: [{ student_id: validId, score: 0 }] };
+const assessment = { name: "Quiz 1", term: 1, category: "written_work", sequence: 1, date: "2026-10-08", total_items: 50, subject_id: validId, class_sections: [{ grade: 7, section_id: validId }], scores: [{ student_id: validId, score: 0 }] };
 
 async function apiFor(t) {
   const app = express();
@@ -126,6 +126,7 @@ test("API rejects invalid text and number types before route/database code", asy
 
 test("API validates every assessment input and score range", async (t) => {
   const api = await apiFor(t);
+  for (const class_sections of [undefined, null, [], [null], [{ grade: true, section_id: validId }], [{ grade: 7, section_id: "bad" }]]) assert.equal((await api.send("/assessments", { ...assessment, class_sections })).status, 400);
   for (const patch of [{ name: "123" }, { term: true }, { term: "1.0" }, { term: 4 }, { category: "__proto__" }, { category: { toString: null } }, { sequence: 6 }, { sequence: [1] }, { date: "2026-02-29" }, { total_items: "1e2" }, { total_items: false }, { scores: [{ student_id: validId, score: 51 }] }, { scores: [{ student_id: validId, score: true }] }]) {
     assert.equal((await api.send("/assessments", { ...assessment, ...patch })).status, 400, JSON.stringify(patch));
   }

@@ -16,6 +16,8 @@ import SchoolYear from "./models/SchoolYear.js";
 import Intervention from "./models/Intervention.js";
 import AwardCertificate from "./models/AwardCertificate.js";
 import AuditEvent from "./models/AuditEvent.js";
+import ClassOffering from "./models/ClassOffering.js";
+import classManagementRoutes from "./classManagement.js";
 import accountRoutes from "./accountRoutes.js";
 import teacherToolsRoutes from "./teacherTools.js";
 import studentLifecycleRoutes from "./studentLifecycle.js";
@@ -25,7 +27,6 @@ import studentRoutes from "./student.js";
 import studentImportRoutes from "./studentImport.js";
 import subjectRoutes from "./subject.js";
 import assessmentRoutes from "./assessment.js";
-import geminiRoute from "./geminiRoute.js";
 import { validateRequestInputs } from "./middleware/inputValidation.js";
 
 const app = express();
@@ -54,7 +55,7 @@ function initializeDatabase() {
   if (!databaseInitialization) {
     databaseInitialization = (async () => {
       await connectMongoDatabase();
-      await Promise.all([SchoolYear, Intervention, AwardCertificate, AuditEvent].map((Model) => Model.createIndexes()));
+      await Promise.all([SchoolYear, Intervention, AwardCertificate, AuditEvent, ClassOffering].map((Model) => Model.createIndexes()));
     })().catch((error) => {
       databaseInitialization = undefined;
       throw error;
@@ -87,12 +88,28 @@ api.use(accountRoutes);
 api.use(teacherToolsRoutes);
 api.use(loginRoutes);
 api.use(sectionRoutes);
+api.use(classManagementRoutes);
 api.use(studentLifecycleRoutes);
 api.use(studentRoutes);
 api.use(studentImportRoutes);
 api.use(subjectRoutes);
 api.use(assessmentRoutes);
-api.use(geminiRoute);
+// AI/PDF dependencies are only needed for these routes, not for sign-in or
+// the class directory. Cache the import within each function instance.
+let geminiRouter;
+api.use(async (req, res, next) => {
+  if (!/^\/(?:gemini(?:\/|$)|students\/[^/]+\/insights(?:\/|$))/i.test(req.path)) return next();
+  try {
+    geminiRouter ??= import("./geminiRoute.js").catch((error) => {
+      geminiRouter = undefined;
+      throw error;
+    });
+    const { default: router } = await geminiRouter;
+    return router(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+});
 app.use("/api", api);
 
 app.use((req, res) => {

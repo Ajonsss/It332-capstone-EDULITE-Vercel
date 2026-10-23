@@ -15,6 +15,9 @@ import Student from "./models/Student.js";
 import {
   calculateStudentSubjectGrade,
 } from "./utils/grading.js";
+import { calculateTermPerformance } from "./utils/termPerformance.js";
+import { validateAssessmentSections } from "./utils/assessmentSections.js";
+import { assessmentIncludesStudent, assessmentStudentFilter, assessmentOverlapFilter } from "../shared/assessmentScope.mjs";
 
 import {
   requireAuth,
@@ -200,6 +203,8 @@ async function validateAssessment(
   {
     session = null,
     excludeAssessmentId = null,
+    existingAssessment = null,
+    schoolYearId = null,
   } = {},
 ) {
   const budgetError = validateInput(body.budget_of_work, { kind: "budgetOfWork", label: "Budget of Work", required: false });
@@ -331,12 +336,16 @@ async function validateAssessment(
     };
   }
 
+  const sectionValidation = await validateAssessmentSections(body.class_sections, { ownerId, subjectId: subject._id, schoolYearId, session, existingAssessment });
+  if (sectionValidation.error) return sectionValidation;
+  const classSections = sectionValidation.value;
+
   /*
     ==========================================================
     DUPLICATE ECR SLOT PREVENTION
     ==========================================================
 
-    One subject + one term may only have:
+    Each section in one subject + one term may only have:
 
       one WW1
       one WW2
@@ -350,6 +359,7 @@ async function validateAssessment(
 
   const duplicateFilter = {
     ownerId,
+    ...assessmentOverlapFilter(classSections),
 
     subjectId:
       subject._id,
@@ -391,12 +401,13 @@ async function validateAssessment(
         `${getSlotLabel(
           category,
           sequence,
-        )} already exists for ${subject.name}, Term ${term}.`,
+        )} already exists for ${subject.name}, Term ${term}, in one or more of these sections.`,
     };
   }
 
   return {
     value: {
+      classSections,
       ...(body.budget_of_work !== undefined ? { budgetOfWork: (body.budget_of_work ?? "").trim() } : {}),
       name,
 
@@ -502,6 +513,7 @@ async function validateScores(
   subjectId,
   ownerId,
   session = null,
+  classSections = null,
 ) {
   const normalization =
     normalizeScoreEntries(scores);
@@ -527,6 +539,7 @@ async function validateScores(
 
   let studentQuery =
     Student.find({
+      ...assessmentStudentFilter(classSections),
       _id: {
         $in: studentIds,
       },
@@ -553,7 +566,7 @@ async function validateScores(
   ) {
     return {
       error:
-        "Scores can only be recorded for students enrolled in the assessment subject.",
+        "Scores can only be recorded for students enrolled in this subject and the selected sections.",
     };
   }
 
@@ -675,6 +688,7 @@ function formatAssessment(
       ),
 
     budget_of_work: assessment.budgetOfWork ?? "",
+    class_sections: assessment.classSections?.map((entry) => ({ grade: entry.grade, section_id: String(entry.sectionId) })) ?? null,
 
     total_items:
       assessment.totalItems,
@@ -994,8 +1008,8 @@ router.get(
           });
       }
 
-      const students =
-        await Student
+      const studentsQuery =
+        Student
           .find({
             ownerId,
           })
@@ -1048,13 +1062,13 @@ router.get(
           subjectFilter;
       }
 
-      const assessments =
-        await Assessment
+      const assessmentsQuery =
+        Assessment
           .find(
             assessmentFilter,
           )
           .select(
-            "name term category sequence totalItems subjectId date",
+            "name term category sequence totalItems subjectId date classSections",
           )
           .sort({
             subjectId: 1,
@@ -1064,6 +1078,8 @@ router.get(
             date: 1,
           })
           .lean();
+
+      const [students, assessments] = await Promise.all([studentsQuery, assessmentsQuery]);
 
       const assessmentIds =
         assessments.map(
@@ -1160,7 +1176,7 @@ router.get(
             ) ?? [];
 
           const records =
-            subjectAssessments.map(
+            subjectAssessments.filter((assessment) => assessmentIncludesStudent(assessment, student)).map(
               (assessment) => {
                 const key =
                   `${student._id.toString()}:${assessment._id.toString()}`;
@@ -1199,7 +1215,13 @@ router.get(
           const calculation =
             calculateStudentSubjectGrade(
               records,
+              student.importedGrades?.find((entry) => String(entry.subjectId) === subjectId),
             );
+
+          for (const term of TERM_NUMBERS) {
+            const result = calculation.terms[`term${term}`];
+            result.performance = calculateTermPerformance(records, term, result);
+          }
 
           summaries.push({
             student_id:
@@ -1496,6 +1518,7 @@ router.get(
             subjectIds:
               assessment.subjectId
                 ._id,
+            ...assessmentStudentFilter(assessment.classSections),
           })
           .populate({
             path:
@@ -1556,6 +1579,8 @@ router.get(
               section:
                 student.sectionId
                   ?.name ?? "",
+
+              section_id: String(student.sectionId?._id ?? ""),
 
               score:
                 scoreRecord
@@ -1627,6 +1652,7 @@ router.post(
         await validateAssessment(
           req.body,
           ownerId,
+          { schoolYearId: req.academicYear },
         );
 
       if (
@@ -1651,6 +1677,8 @@ router.post(
             .value.subjectId,
 
           ownerId,
+          null,
+          assessmentValidation.value.classSections,
         );
 
       if (
@@ -1678,6 +1706,7 @@ router.post(
 
                 {
                   session,
+                  schoolYearId: req.academicYear,
                 },
               );
 
@@ -1694,6 +1723,9 @@ router.post(
 
               throw validationError;
             }
+
+            const transactionScores = await validateScores(req.body.scores, transactionValidation.value.totalItems, transactionValidation.value.subjectId, ownerId, session, transactionValidation.value.classSections);
+            if (transactionScores.error) { const error = new Error(transactionScores.error); error.statusCode = 400; throw error; }
 
             const [
               assessment,
@@ -1717,12 +1749,12 @@ router.post(
               assessment;
 
             if (
-              scoresValidation
+              transactionScores
                 .value.length > 0
             ) {
               await AssessmentScore
                 .insertMany(
-                  scoresValidation
+                  transactionScores
                     .value
                     .map(
                       (entry) => ({
@@ -1866,6 +1898,8 @@ router.put(
           {
             excludeAssessmentId:
               existingAssessment._id,
+            existingAssessment,
+            schoolYearId: req.academicYear,
           },
         );
 
@@ -1891,6 +1925,8 @@ router.put(
             .value.subjectId,
 
           ownerId,
+          null,
+          assessmentValidation.value.classSections,
         );
 
       if (
@@ -1918,6 +1954,8 @@ router.put(
 
                   excludeAssessmentId:
                     existingAssessment._id,
+                  existingAssessment,
+                  schoolYearId: req.academicYear,
                 },
               );
 
@@ -1934,6 +1972,9 @@ router.put(
 
               throw validationError;
             }
+
+            const transactionScores = await validateScores(req.body.scores, transactionValidation.value.totalItems, transactionValidation.value.subjectId, ownerId, session, transactionValidation.value.classSections);
+            if (transactionScores.error) { const error = new Error(transactionScores.error); error.statusCode = 400; throw error; }
 
             const assessment =
               await Assessment
@@ -1989,12 +2030,12 @@ router.put(
               );
 
             if (
-              scoresValidation
+              transactionScores
                 .value.length > 0
             ) {
               await AssessmentScore
                 .insertMany(
-                  scoresValidation
+                  transactionScores
                     .value
                     .map(
                       (entry) => ({
@@ -2149,6 +2190,7 @@ router.put(
 
             subjectIds:
               assessment.subjectId,
+            ...assessmentStudentFilter(assessment.classSections),
           })
           .lean();
 
@@ -2157,7 +2199,7 @@ router.put(
           .status(400)
           .json({
             message:
-              "The student is not enrolled in this assessment subject.",
+              "The student is not enrolled in this assessment subject and selected sections.",
           });
       }
 

@@ -70,6 +70,9 @@ export function validateRequestInputs(req, res, next) {
     check("total_items", { kind: "integer", label: "Highest Possible Score", min: 1 });
     check("date", { kind: "date", label: "Assessment date" });
     id("subject_id", "subject");
+    if (body.class_sections !== undefined || (req.method === "POST" && path === "/assessments")) {
+      if (!Array.isArray(body.class_sections) || !body.class_sections.length || body.class_sections.some((entry) => !entry || !Number.isSafeInteger(entry.grade) || entry.grade < 1 || !isId(entry.section_id))) fields.class_sections = "Choose at least one valid grade level and section for the assessment.";
+    }
     scores("student_id", parseWholeNumber(body.total_items));
   } else if (/^\/(?:api\/)?gemini\/student-support\/[^/]+$/.test(path)) {
     check("term", { kind: "integer", label: "Term", min: 1, max: 3 });

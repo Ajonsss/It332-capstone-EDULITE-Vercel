@@ -5,7 +5,7 @@ import ExcelJS from "exceljs";
 import express from "express";
 import { once } from "node:events";
 import { createStudentImportRouter } from "../studentImport.js";
-import { parseStudentWorkbook, IMPORT_HEADERS, MAX_IMPORT_ROWS } from "../utils/studentImport.js";
+import { parseStudentWorkbook, IMPORT_HEADERS, GRADE_IMPORT_HEADERS, MAX_IMPORT_ROWS } from "../utils/studentImport.js";
 
 const ownerId = "507f1f77bcf86cd799439011";
 const subjectId = "507f1f77bcf86cd799439012";
@@ -67,15 +67,21 @@ test("enforces student limit including repeated names", async () => {
   await assert.rejects(parseStudentWorkbook(buffer), /at most 1000/);
 });
 
-test("downloadable template has exactly the requested headers and no example students", async () => {
+test("legacy template retains its headers and optional grade import compatibility", async () => {
   const buffer = await fs.readFile(new URL("../../frontend/public/templates/student-import-template.xlsx", import.meta.url));
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
   assert.deepEqual(workbook.getWorksheet("Students").getRow(1).values.slice(1, 4), IMPORT_HEADERS);
+  assert.deepEqual(workbook.getWorksheet("Grades").getRow(1).values.slice(1, 8), GRADE_IMPORT_HEADERS);
   await assert.rejects(parseStudentWorkbook(buffer), /worksheet is empty/);
   const sheet = workbook.getWorksheet("Students");
   sheet.getRow(2).values = [7, "Rose", "Maria Santos"];
-  assert.equal((await parseStudentWorkbook(await workbook.xlsx.writeBuffer())).students.length, 1);
+  workbook.getWorksheet("Grades").getRow(2).values = [7, "Rose", "Maria Santos", "Mathematics", 88.5, null, 0];
+  const parsed = await parseStudentWorkbook(await workbook.xlsx.writeBuffer());
+  assert.equal(parsed.students.length, 1);
+  assert.equal(parsed.grades[0].term1, 88.5);
+  assert.equal(parsed.grades[0].term2, null);
+  assert.equal(parsed.grades[0].term3, 0);
   assert.equal(sheet.views[0].ySplit, 1);
   assert.equal(sheet.getCell("A2").dataValidation.type, "whole");
 });

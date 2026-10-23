@@ -7,6 +7,8 @@ import { parseWholeNumber, validateInput } from "../../../shared/inputValidation
 
 import { API_URL } from "../utils/api.js";
 import { usePageTitle } from "../utils/usePageTitle.js";
+import { buildClassHierarchy } from "../utils/classHierarchy.js";
+import { assessmentIncludesStudent } from "../../../shared/assessmentScope.mjs";
 
 const APPLE_FONT =
   '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
@@ -63,6 +65,7 @@ function emptyAssessmentForm() {
     date: todayAsInputValue(),
     total_items: "",
     subject_id: "",
+    class_sections: [],
   };
 }
 
@@ -96,10 +99,11 @@ export default function AssessmentForm({
   const [formData, setFormData] = useState(emptyAssessmentForm);
   const [gradingRules, setGradingRules] = useState({ writtenWorkWeight: 20, performanceTaskWeight: 50, examinationWeight: 30 });
   const [subjects, setSubjects] = useState([]);
-  const [students, setStudents] = useState([]);
+  const [enrolledStudents, setEnrolledStudents] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [scores, setScores] = useState({});
   const [loading, setLoading] = useState(true);
-  const [loadingStudents, setLoadingStudents] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -125,49 +129,11 @@ export default function AssessmentForm({
     );
   }, [selectedCategory]);
 
-  const loadStudentsForSubject = async (
-    subjectId,
-    preserveScores = false,
-  ) => {
-    if (!subjectId) {
-      setStudents([]);
-      setScores({});
-      return;
-    }
-
-    setLoadingStudents(true);
-    setError("");
-
-    try {
-      const response = await axios.get(`${API_URL}/students`, {
-        params: {
-          subject_id: String(subjectId),
-        },
-      });
-
-      const loadedStudents = response.data ?? [];
-
-      setStudents(loadedStudents);
-
-      setScores((currentScores) =>
-        Object.fromEntries(
-          loadedStudents.map((student) => [
-            student.id,
-            preserveScores
-              ? (currentScores[student.id] ?? "")
-              : "",
-          ]),
-        ),
-      );
-    } catch (requestError) {
-      setError(
-        requestError.response?.data?.message ||
-          "Unable to load students for the subject.",
-      );
-    } finally {
-      setLoadingStudents(false);
-    }
-  };
+  const sectionOptions = useMemo(() => buildClassHierarchy({ students: enrolledStudents, sections, subjects, classes })
+    .flatMap((grade) => grade.sections.filter((section) => section.subjects.some((subject) => subject.id === formData.subject_id))
+      .map((section) => ({ grade: grade.grade, section_id: section.id, name: section.name }))), [enrolledStudents, sections, subjects, classes, formData.subject_id]);
+  const students = useMemo(() => enrolledStudents.filter((student) => student.subject_ids?.includes(formData.subject_id) &&
+    (formData.class_sections === null || (formData.class_sections.length > 0 && assessmentIncludesStudent(formData, student)))), [enrolledStudents, formData]);
 
   useEffect(() => {
     const token = localStorage.getItem("eduliteToken");
@@ -184,11 +150,14 @@ export default function AssessmentForm({
       setLoading(true);
       setError("");
       setFormData(emptyAssessmentForm());
-      setStudents([]);
+      setEnrolledStudents([]);
       setScores({});
 
       try {
-        const [subjectResponse, ruleResponse] = await Promise.all([axios.get(`${API_URL}/subjects`), axios.get(`${API_URL}/grading-rules`)]);
+        const [subjectResponse, ruleResponse, studentResponse, sectionResponse, classResponse] = await Promise.all([
+          axios.get(`${API_URL}/subjects`), axios.get(`${API_URL}/grading-rules`), axios.get(`${API_URL}/students`),
+          axios.get(`${API_URL}/sections`), axios.get(`${API_URL}/classes`),
+        ]);
         if (!cancelled) setGradingRules(ruleResponse.data);
 
         if (cancelled) {
@@ -197,6 +166,9 @@ export default function AssessmentForm({
 
         const loadedSubjects = subjectResponse.data ?? [];
         setSubjects(loadedSubjects);
+        setEnrolledStudents(studentResponse.data ?? []);
+        setSections(sectionResponse.data ?? []);
+        setClasses(classResponse.data ?? []);
 
         if (isEditing) {
           const assessmentResponse = await axios.get(
@@ -240,9 +212,8 @@ export default function AssessmentForm({
             subject_id: String(
               assessment.subject_id ?? "",
             ),
+            class_sections: assessment.class_sections ?? null,
           });
-
-          setStudents(assessmentStudents);
 
           setScores(
             Object.fromEntries(
@@ -261,12 +232,6 @@ export default function AssessmentForm({
               ? String(firstSubjectId)
               : "",
           }));
-
-          if (firstSubjectId) {
-            await loadStudentsForSubject(
-              String(firstSubjectId),
-            );
-          }
         }
       } catch (requestError) {
         if (!cancelled) {
@@ -289,13 +254,19 @@ export default function AssessmentForm({
     };
   }, [resolvedAssessmentId, isEditing, navigate]);
 
-  const handleSubjectChange = async (value) => {
+  const handleSubjectChange = (value) => {
     setFormData((current) => ({
       ...current,
       subject_id: value,
+      class_sections: [],
     }));
+    setScores({});
+  };
 
-    await loadStudentsForSubject(value);
+  const handleSectionChange = (section, checked) => {
+    setFormData((current) => ({ ...current, class_sections: checked
+      ? [...(current.class_sections ?? []), { grade: section.grade, section_id: section.section_id }]
+      : (current.class_sections ?? []).filter((entry) => entry.grade !== section.grade || entry.section_id !== section.section_id) }));
   };
 
   const handleCategoryChange = (value) => {
@@ -310,10 +281,10 @@ export default function AssessmentForm({
 
   const enteredCount = useMemo(
     () =>
-      Object.values(scores).filter(
-        (score) => score !== "",
+      students.filter(
+        (student) => scores[student.id] !== undefined && scores[student.id] !== "",
       ).length,
-    [scores],
+    [scores, students],
   );
 
   const handleScoreChange = (studentId, value) => {
@@ -355,6 +326,11 @@ export default function AssessmentForm({
       return;
     }
 
+    if (formData.class_sections !== null && !formData.class_sections.length) {
+      setError("Choose at least one section that will take this assessment.");
+      return;
+    }
+
     const term = parseWholeNumber(formData.term);
 
     if (![1, 2, 3].includes(term)) {
@@ -391,8 +367,9 @@ export default function AssessmentForm({
     const dateError = validateInput(formData.date, { kind: "date", label: "Assessment date" });
     if (dateError) { setError(dateError); return; }
 
-    for (const [studentId, value] of Object.entries(scores)) {
-      if (value === "") {
+    for (const student of students) {
+      const value = scores[student.id];
+      if (value === "" || value === undefined) {
         continue;
       }
 
@@ -403,11 +380,6 @@ export default function AssessmentForm({
         score < 0 ||
         score > totalItems
       ) {
-        const student = students.find(
-          (item) =>
-            String(item.id) === String(studentId),
-        );
-
         setError(
           `${student?.name || "A student"}'s score must be from 0 to ${totalItems}.`,
         );
@@ -424,6 +396,7 @@ export default function AssessmentForm({
       date: formData.date,
       total_items: totalItems,
       subject_id: String(formData.subject_id),
+      ...(formData.class_sections !== null ? { class_sections: formData.class_sections } : {}),
 
       scores: students.map((student) => ({
         student_id: String(student.id),
@@ -507,7 +480,7 @@ export default function AssessmentForm({
               <div className="mb-5">
                 <h3 className="text-xl font-bold text-[var(--ed-color-25313c)]">Assessment Details</h3>
                 <p className="mt-1 text-sm text-[var(--ed-color-71808d)]">
-                  Choose the subject, term, component, and exact ECR slot.
+                  Choose the subject, sections taking the assessment, term, component, and exact ECR slot.
                 </p>
               </div>
 
@@ -565,6 +538,27 @@ export default function AssessmentForm({
                     ))}
                   </select>
                 </div>
+
+                <fieldset className="space-y-3 rounded-[13px] border border-[var(--ed-color-d8e1e7)] p-4 md:col-span-2" disabled={saving}>
+                  <legend className="px-1 text-sm font-semibold text-[var(--ed-color-52616d)]">Which sections will take this assessment? <span className="text-[var(--ed-color-c53939)]">*</span></legend>
+                  <p className="text-sm text-[var(--ed-color-71808d)]">Select one or more sections registered for this subject. Only their enrolled students will appear below.</p>
+                  {isEditing && formData.class_sections === null && <p role="status" className="text-sm text-[var(--ed-color-71808d)]">This existing assessment applies to all sections enrolled in the subject. Choose sections below to limit it.</p>}
+                  {sectionOptions.length > 0 ? <>
+                    <div className="flex gap-4 text-sm font-semibold">
+                      <button type="button" onClick={() => setFormData((current) => ({ ...current, class_sections: sectionOptions.map(({ grade, section_id }) => ({ grade, section_id })) }))} className="text-[var(--ed-primary)]">Select all sections</button>
+                      <button type="button" onClick={() => setFormData((current) => ({ ...current, class_sections: [] }))}>Clear sections</button>
+                    </div>
+                    <div className="grid max-h-60 gap-2 overflow-y-auto sm:grid-cols-2">
+                      {sectionOptions.map((section) => <label key={`${section.grade}:${section.section_id}`} className="flex items-center gap-3 rounded-lg border border-[var(--ed-color-e3e9ee)] p-3 text-sm">
+                        <input type="checkbox" aria-label={`Assessment section Grade ${section.grade} ${section.name}`} checked={formData.class_sections === null || formData.class_sections.some((entry) => entry.grade === section.grade && entry.section_id === section.section_id)} onChange={(event) => {
+                          if (formData.class_sections === null) setFormData((current) => ({ ...current, class_sections: sectionOptions.filter((entry) => event.target.checked || entry.grade !== section.grade || entry.section_id !== section.section_id).map(({ grade, section_id }) => ({ grade, section_id })) }));
+                          else handleSectionChange(section, event.target.checked);
+                        }} className="accent-[var(--ed-primary)]" />
+                        Grade {section.grade} · {section.name}
+                      </label>)}
+                    </div>
+                  </> : <p className="text-sm text-[var(--ed-color-71808d)]">No sections are registered for this subject. Add the subject to a section in Manage your class first.</p>}
+                </fieldset>
 
                 <div>
                   <FormLabel htmlFor="assessment-term" label="Grading Term" required />
@@ -687,9 +681,7 @@ export default function AssessmentForm({
                 </span>
               </div>
 
-              {loadingStudents ? (
-                <LoadingIndicator label="Loading enrolled students..." className="mt-5 rounded-[16px] bg-[var(--ed-color-f7f9fb)] py-12" />
-              ) : (
+              {(
                 <div className="mt-5 overflow-x-auto rounded-[18px] border border-[var(--ed-color-e3e9ee)]">
                   <table className="w-full min-w-[650px]">
                     <thead className="bg-[var(--ed-color-f8fafb)]">
@@ -729,7 +721,7 @@ export default function AssessmentForm({
                       {students.length === 0 && (
                         <tr>
                           <td colSpan="4" className="px-5 py-12 text-center text-sm text-[var(--ed-color-8a98a5)]">
-                            No students are enrolled in this subject yet. The assessment can still be saved.
+                            {formData.class_sections !== null && !formData.class_sections.length ? "Choose the sections taking this assessment to view their students." : "No students are enrolled in the selected sections for this subject yet. The assessment can still be saved."}
                           </td>
                         </tr>
                       )}

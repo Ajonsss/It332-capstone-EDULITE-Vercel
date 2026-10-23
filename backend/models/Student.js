@@ -8,6 +8,16 @@ const studentSchema =
       archived: { type: Boolean, default: false, index: true },
       archivedAt: { type: Date, default: null },
       archiveSnapshot: { type: mongoose.Schema.Types.Mixed, select: false },
+      importedGrades: {
+        type: [new mongoose.Schema({
+          subjectId: { type: mongoose.Schema.Types.ObjectId, ref: "Subject", required: true },
+          term1: { type: Number, min: 0, max: 100, default: null },
+          term2: { type: Number, min: 0, max: 100, default: null },
+          term3: { type: Number, min: 0, max: 100, default: null },
+          importedAt: { type: Date, required: true },
+        }, { _id: false })],
+        default: [],
+      },
 
       legacyId: {
         type: Number,

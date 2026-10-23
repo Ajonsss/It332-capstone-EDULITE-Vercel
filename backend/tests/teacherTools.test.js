@@ -10,6 +10,7 @@ import User from "../models/User.js";
 import Student from "../models/Student.js";
 import AssessmentScore from "../models/AssessmentScore.js";
 import AuditEvent from "../models/AuditEvent.js";
+import ClassOffering from "../models/ClassOffering.js";
 import accountRoutes from "../accountRoutes.js";
 import { requireAuth } from "../middleware/auth.js";
 import { academicContext, DEFAULT_RULES } from "../services/academicContext.js";
@@ -118,7 +119,10 @@ test("backup exports exclude credentials and restores remap references without o
     students: [{ _id: studentId, ownerId: owner, name: "Alice", grade: 7, sectionId, subjectIds: [subjectId], schoolYearId: null, archived: true, archiveSnapshot: { name: "Alice", schoolYear: "2026–2027", outcome: "promoted", subjects: [] } }],
     assessments: [], scores: [], insights: [{ _id: new mongoose.Types.ObjectId(), ownerId: owner, studentId, supportType: "intervention", classification: "At Risk", focusLabel: "Mathematics", model: "test-model", title: "Fractions plan", result: { plan: { title: "Fractions plan" } }, pdfData: Buffer.from("%PDF-test") }], interventions: [], awards: [], history: [],
   };
-  const models = { schoolYears: SchoolYear, sections: Section, subjects: Subject, students: Student, assessments: Assessment, scores: AssessmentScore, insights: StudentAiInsight, interventions: Intervention, awards: AwardCertificate, history: AuditEvent };
+  rows.students[0].importedGrades = [{ subjectId, term1: 85, term2: 90, term3: 95, importedAt: new Date() }];
+  rows.classes = [{ _id: new mongoose.Types.ObjectId(), ownerId: owner, grade: 7, sectionId, subjectIds: [subjectId], schoolYearId: null }];
+  rows.classes.push({ _id: new mongoose.Types.ObjectId(), ownerId: owner, grade: 8, sectionId: null, subjectIds: [], schoolYearId: null });
+  const models = { schoolYears: SchoolYear, sections: Section, subjects: Subject, students: Student, assessments: Assessment, scores: AssessmentScore, insights: StudentAiInsight, interventions: Intervention, awards: AwardCertificate, history: AuditEvent, classes: ClassOffering };
   const saved = [];
   for (const [key, Model] of Object.entries(models)) {
     t.mock.method(Model, "find", (filter) => { assert.equal(String(filter.ownerId), String(owner)); const q = query(rows[key]); q.setOptions = function(options) { assert.equal(options.acrossSchoolYears, true); return this; }; return q; });
@@ -139,12 +143,22 @@ test("backup exports exclude credentials and restores remap references without o
   assert.equal((await restore({ password: "wrong", backup })).status, 400); assert.equal(transactions, 0);
   const broken = structuredClone(backup); broken.collections.students[0].sectionId = String(subjectId);
   assert.equal((await restore({ password: "BackupPassword1!", backup: broken })).status, 400); assert.equal(saved.length, 0);
+  const brokenGrades = structuredClone(backup); brokenGrades.collections.students[0].importedGrades[0].subjectId = String(studentId);
+  assert.equal((await restore({ password: "BackupPassword1!", backup: brokenGrades })).status, 400); assert.equal(saved.length, 0);
   const response = await restore({ password: "BackupPassword1!", backup });
   assert.equal(response.status, 200, JSON.stringify(await response.json())); assert.equal(transactions, 1);
   const student = saved.find((item) => item.key === "students").doc;
   const section = saved.find((item) => item.key === "sections").doc;
   const subject = saved.find((item) => item.key === "subjects").doc;
   assert.notEqual(String(student._id), String(studentId)); assert.equal(String(student.sectionId), String(section._id)); assert.equal(String(student.subjectIds[0]), String(subject._id));
+  assert.equal(String(student.importedGrades[0].subjectId), String(subject._id));
+  assert.equal(student.importedGrades[0].term2, 90);
+  const registration = saved.find((item) => item.key === "classes").doc;
+  assert.equal(String(registration.sectionId), String(section._id));
+  assert.equal(String(registration.subjectIds[0]), String(subject._id));
+  assert.equal(registration.grade, 7);
+  const emptyGrade = saved.find((item) => item.key === "classes" && item.doc.grade === 8).doc;
+  assert.equal(emptyGrade.sectionId, null); assert.deepEqual(emptyGrade.subjectIds, []); assert.ok(emptyGrade.schoolYearId);
   assert.equal(String(student.ownerId), String(owner)); assert.ok(student.schoolYearId); assert.equal(student.archiveSnapshot.schoolYear, "2026–2027");
 });
 

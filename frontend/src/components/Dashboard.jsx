@@ -1,23 +1,25 @@
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import SystemTutorial, { SettingsView } from "./SystemTutorial";
-import InterventionsView from "./InterventionsView";
-import YearEndView from "./YearEndView";
-import AwardsView from "./AwardsView";
-import StudentForm from "./StudentForm";
-import StudentImport from "./StudentImport";
 import ValidatedInput from "./ValidatedInput";
-import { parseWholeNumber, validateInput } from "../../../shared/inputValidation.mjs";
-import AssessmentForm from "./AssessmentForm";
+import { parseWholeNumber } from "../../../shared/inputValidation.mjs";
 import RecordPerformanceSummary from "./RecordPerformanceSummary";
 import MobileNavigation from "./MobileNavigation";
 import LoadingIndicator from "./LoadingIndicator";
 import { NAVIGATION_ITEMS, isNavigationItemActive } from "../utils/navigation.js";
 import { usePageTitle } from "../utils/usePageTitle.js";
-import { buildPerformanceRoster, getPerformanceStatus, hasPerformanceGrade, PERFORMANCE_LEVELS } from "../utils/performance";
+import { buildPerformanceRoster, getPerformanceStatus, hasPerformanceGrade, PERFORMANCE_LEVELS, summarizeTermPerformance } from "../utils/performance";
 
 import { API_URL } from "../utils/api.js";
+import { assessmentIncludesStudent } from "../../../shared/assessmentScope.mjs";
+
+const SystemTutorial = lazy(() => import("./SystemTutorial"));
+const SettingsView = lazy(() => import("./SettingsView"));
+const InterventionsView = lazy(() => import("./InterventionsView"));
+const YearEndView = lazy(() => import("./YearEndView"));
+const AwardsView = lazy(() => import("./AwardsView"));
+const ClassManagementView = lazy(() => import("./ClassManagementView"));
+const AssessmentForm = lazy(() => import("./AssessmentForm"));
 
 const PAGE_DETAILS = {
   interventions: { title: "Intervention Progress", description: "Assign practice activities and track completion and learning gains." },
@@ -34,24 +36,9 @@ const PAGE_DETAILS = {
     description:
       "Review, edit, and manage student scores for every enrolled subject.",
   },
-  sections: {
-    title: "Sections",
-    description:
-      "Create and manage the sections used when registering students.",
-  },
-  subjects: {
-    title: "Subjects",
-    description:
-      "Create subjects and select the students enrolled in each subject.",
-  },
-  students: {
-    title: "Students",
-    description:
-      "Register students, manage enrollment, and open individual records.",
-  },
-  studentForm: {
-    title: "Register Student",
-    description: "Add or update a student without leaving the dashboard.",
+  manageClass: {
+    title: "Manage your class",
+    description: "Browse grade levels, sections, subjects, and enrolled students. Add a class with guided setup.",
   },
   assessments: {
     title: "Assessments",
@@ -76,23 +63,14 @@ export default function Dashboard() {
   const [students, setStudents] = useState([]);
   const [sections, setSections] = useState([]);
   const [subjects, setSubjects] = useState([]);
+  const [registeredClasses, setRegisteredClasses] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [assessments, setAssessments] = useState([]);
   const [assessmentRecords, setAssessmentRecords] = useState([]);
   const [gradeSummaries, setGradeSummaries] = useState([]);
   const [selectedSection, setSelectedSection] = useState("ALL");
   const [selectedTerm, setSelectedTerm] = useState("1");
   const [selectedSubject, setSelectedSubject] = useState("ALL");
-  const [newSection, setNewSection] = useState("");
-  const [newSubject, setNewSubject] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [addingSection, setAddingSection] = useState(false);
-  const [addingSubject, setAddingSubject] = useState(false);
-  const [showSubjectStudentPrompt, setShowSubjectStudentPrompt] =
-    useState(false);
-  const [selectedSubjectStudentIds, setSelectedSubjectStudentIds] = useState(
-    [],
-  );
-  const [subjectStudentSearch, setSubjectStudentSearch] = useState("");
   const [toasts, setToasts] = useState([]);
   const toastCounterRef = useRef(0);
   const toastTimersRef = useRef(new Map());
@@ -103,6 +81,7 @@ export default function Dashboard() {
   const [tutorialReplayRequest, setTutorialReplayRequest] = useState(0);
   const [activeView, setActiveView] = useState("dashboard");
   const [studentFormId, setStudentFormId] = useState(null);
+  const [studentEditorOpen, setStudentEditorOpen] = useState(false);
   const [assessmentFormId, setAssessmentFormId] = useState(null);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -208,13 +187,7 @@ export default function Dashboard() {
   };
 
   const pageDetails =
-    activeView === "studentForm" && studentFormId
-      ? {
-          title: "Edit Student",
-          description:
-            "Update the student's information without leaving the dashboard.",
-        }
-      : activeView === "assessmentForm" && assessmentFormId
+    activeView === "assessmentForm" && assessmentFormId
         ? {
             title: "Edit Assessment",
             description:
@@ -297,6 +270,7 @@ export default function Dashboard() {
         gradeSummaryResponse,
         schoolYearResponse,
         rulesResponse,
+        classResponse,
       ] = await Promise.all([
         axios.get(`${API_URL}/students`),
         axios.get(`${API_URL}/sections`),
@@ -306,6 +280,7 @@ export default function Dashboard() {
         axios.get(`${API_URL}/grade-summaries`),
         axios.get(`${API_URL}/school-years`),
         axios.get(`${API_URL}/grading-rules`),
+        axios.get(`${API_URL}/classes`),
       ]);
 
       setActiveYearName(schoolYearResponse.data.years.find((year) => String(year._id ?? "") === String(schoolYearResponse.data.activeId ?? ""))?.name ?? "School year");
@@ -313,6 +288,7 @@ export default function Dashboard() {
       setStudents(studentResponse.data);
       setSections(sectionResponse.data);
       setSubjects(subjectResponse.data);
+      setRegisteredClasses(classResponse.data ?? []);
       setAssessments(assessmentResponse.data);
       setAssessmentRecords(recordResponse.data);
       setGradeSummaries(gradeSummaryResponse.data ?? []);
@@ -346,8 +322,9 @@ export default function Dashboard() {
   };
 
   const openView = (view) => {
-    if (view !== "studentForm") {
+    if (view !== "manageClass") {
       setStudentFormId(null);
+      setStudentEditorOpen(false);
     }
 
     if (view !== "assessmentForm") {
@@ -368,184 +345,6 @@ export default function Dashboard() {
         ? "auto"
         : "smooth",
     });
-  };
-
-  const handleAddSection = async (event) => {
-    event.preventDefault();
-
-    const sectionName = newSection.trim();
-
-    const sectionError = validateInput(sectionName, { kind: "section", label: "Section name" });
-    if (sectionError) {
-      setError(sectionError);
-      return;
-    }
-
-    setAddingSection(true);
-    setError("");
-    setSuccess("");
-
-    try {
-      await axios.post(`${API_URL}/sections`, {
-        name: sectionName,
-      });
-
-      setNewSection("");
-
-      await fetchDashboardData({ silent: true });
-
-      setSuccess("Section added successfully.");
-    } catch (err) {
-      setError(err.response?.data?.message || "Unable to add the section.");
-    } finally {
-      setAddingSection(false);
-    }
-  };
-
-  const handleRemoveSection = async (section) => {
-    if (!window.confirm(`Remove section "${section.name}"?`)) {
-      return;
-    }
-
-    setError("");
-    setSuccess("");
-
-    try {
-      await axios.delete(`${API_URL}/sections/${section.id}`);
-
-      if (selectedSection === section.name) {
-        setSelectedSection("ALL");
-      }
-
-      await fetchDashboardData({ silent: true });
-
-      setSuccess("Section removed successfully.");
-    } catch (err) {
-      setError(err.response?.data?.message || "Unable to remove the section.");
-    }
-  };
-
-  const openSubjectStudentPrompt = (event) => {
-    event.preventDefault();
-
-    const subjectError = validateInput(newSubject, { kind: "subject", label: "Subject name" });
-    if (subjectError) {
-      setError(subjectError);
-      return;
-    }
-
-    setSelectedSubjectStudentIds([]);
-    setSubjectStudentSearch("");
-    setError("");
-    setSuccess("");
-    setShowSubjectStudentPrompt(true);
-  };
-
-  const closeSubjectStudentPrompt = () => {
-    if (addingSubject) {
-      return;
-    }
-
-    setShowSubjectStudentPrompt(false);
-    setSelectedSubjectStudentIds([]);
-    setSubjectStudentSearch("");
-  };
-
-  const toggleNewSubjectStudent = (studentId) => {
-    setSelectedSubjectStudentIds((currentIds) =>
-      currentIds.includes(studentId)
-        ? currentIds.filter((id) => id !== studentId)
-        : [...currentIds, studentId],
-    );
-  };
-
-  const handleAddSubject = async () => {
-    const subjectName = newSubject.trim();
-
-    const subjectError = validateInput(subjectName, { kind: "subject", label: "Subject name" });
-    if (subjectError) {
-      setError(subjectError);
-      return;
-    }
-
-    setAddingSubject(true);
-    setError("");
-    setSuccess("");
-
-    try {
-      const response = await axios.post(`${API_URL}/subjects`, {
-        name: subjectName,
-        student_ids: selectedSubjectStudentIds,
-      });
-
-      const enrolledCount =
-        response.data?.student_count ?? selectedSubjectStudentIds.length;
-
-      setNewSubject("");
-      setShowSubjectStudentPrompt(false);
-      setSelectedSubjectStudentIds([]);
-      setSubjectStudentSearch("");
-
-      await fetchDashboardData({ silent: true });
-
-      setSuccess(
-        `${
-          response.data?.message || "Subject added successfully."
-        } ${enrolledCount} student${enrolledCount === 1 ? "" : "s"} enrolled.`,
-      );
-    } catch (err) {
-      setError(err.response?.data?.message || "Unable to add the subject.");
-    } finally {
-      setAddingSubject(false);
-    }
-  };
-
-  const handleRenameSubject = async (subject) => {
-    const nextName = window
-      .prompt("Enter the new subject name:", subject.name)
-      ?.trim();
-
-    if (!nextName || nextName === subject.name) {
-      return;
-    }
-
-    setError("");
-    setSuccess("");
-
-    try {
-      await axios.put(`${API_URL}/subjects/${subject.id}`, {
-        name: nextName,
-      });
-
-      await fetchDashboardData({ silent: true });
-
-      setSuccess("Subject updated successfully.");
-    } catch (err) {
-      setError(err.response?.data?.message || "Unable to update the subject.");
-    }
-  };
-
-  const handleRemoveSubject = async (subject) => {
-    if (!window.confirm(`Remove subject "${subject.name}"?`)) {
-      return;
-    }
-
-    setError("");
-    setSuccess("");
-
-    try {
-      await axios.delete(`${API_URL}/subjects/${subject.id}`);
-
-      if (String(selectedSubject) === String(subject.id)) {
-        setSelectedSubject("ALL");
-      }
-
-      await fetchDashboardData({ silent: true });
-
-      setSuccess("Subject removed successfully.");
-    } catch (err) {
-      setError(err.response?.data?.message || "Unable to remove the subject.");
-    }
   };
 
   const handleDeleteStudent = async (studentId) => {
@@ -592,41 +391,26 @@ export default function Dashboard() {
     }
   };
 
-  const handleRegisterStudent = () => {
-    if (sections.length === 0) {
-      setError("Add at least one section before registering a student.");
-      setActiveView("sections");
-      return;
-    }
-
-    if (subjects.length === 0) {
-      setError("Add at least one subject before registering a student.");
-      setActiveView("subjects");
-      return;
-    }
-
-    setStudentFormId(null);
-    openView("studentForm");
-  };
-
   const handleEditStudent = (studentId) => {
     setStudentFormId(studentId);
-    setActiveView("studentForm");
+    setStudentEditorOpen(true);
+    setActiveView("manageClass");
     setError("");
     setSuccess("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleStudentFormCancel = () => {
-    const returnView = "students";
     setStudentFormId(null);
-    openView(returnView);
+    setStudentEditorOpen(false);
+    openView("manageClass");
   };
 
   const handleStudentFormSaved = async (_result, details) => {
     await fetchDashboardData({ silent: true });
     setStudentFormId(null);
-    setActiveView("students");
+    setStudentEditorOpen(false);
+    setActiveView("manageClass");
     setError("");
     setSuccess(
       details?.isEditing
@@ -639,7 +423,7 @@ export default function Dashboard() {
   const handleAddAssessment = () => {
     if (subjects.length === 0) {
       setError("Add at least one subject before creating an assessment.");
-      setActiveView("subjects");
+      setActiveView("manageClass");
       return;
     }
 
@@ -822,28 +606,15 @@ export default function Dashboard() {
     await loadStudentInsights(student.id);
   };
 
-  const subjectPromptStudents = useMemo(() => {
-    const searchValue = subjectStudentSearch.trim().toLowerCase();
-
-    if (!searchValue) {
-      return students;
-    }
-
-    return students.filter((student) =>
-      `${student.name} ${student.grade} ${student.section}`
-        .toLowerCase()
-        .includes(searchValue),
-    );
-  }, [students, subjectStudentSearch]);
-
   const displayedAssessments = useMemo(() => {
     const subjectFiltered =
-      selectedSubjectId === null
+      (selectedSubjectId === null
         ? assessments
         : assessments.filter(
             (assessment) =>
               assessment.subject_id === selectedSubjectId,
-          );
+          )).filter((assessment) => selectedSection === "ALL" || !assessment.class_sections?.length ||
+            assessment.class_sections.some((entry) => sections.some((section) => section.id === entry.section_id && section.name === selectedSection)));
 
     // Keep legacy assessments visible in the Assessment Library so they
     // can be opened and classified. Official grade views use one term.
@@ -862,6 +633,8 @@ export default function Dashboard() {
   }, [
     assessments,
     selectedSubjectId,
+    selectedSection,
+    sections,
     selectedTerm,
     activeView,
   ]);
@@ -895,7 +668,7 @@ export default function Dashboard() {
 
   const getStudentAssessments = (student) =>
     displayedAssessments.filter((assessment) =>
-      student.subject_ids?.includes(assessment.subject_id),
+      student.subject_ids?.includes(assessment.subject_id) && assessmentIncludesStudent(assessment, student),
     );
 
   const startEditingScores = (student) => {
@@ -1014,11 +787,27 @@ export default function Dashboard() {
   const selectedTermKey = `term${selectedTerm}`;
   const currentTermLabel = `Term ${selectedTerm}`;
 
+  const summariesByStudent = useMemo(() => {
+    const map = new Map();
+    for (const summary of gradeSummaries) {
+      if (!map.has(summary.student_id)) map.set(summary.student_id, []);
+      map.get(summary.student_id).push(summary);
+    }
+    return map;
+  }, [gradeSummaries]);
+
+  const assessmentCountsByStudent = useMemo(() => {
+    const map = new Map();
+    for (const record of assessmentRecords) {
+      if (relevantAssessmentIds.has(record.assessment_id)) map.set(record.student_id, (map.get(record.student_id) ?? 0) + 1);
+    }
+    return map;
+  }, [assessmentRecords, relevantAssessmentIds]);
+
   const studentAnalytics = useMemo(() => {
     return displayedStudents.map((student) => {
-      const matchingSummaries = gradeSummaries.filter(
+      const matchingSummaries = (summariesByStudent.get(student.id) ?? []).filter(
         (summary) =>
-          summary.student_id === student.id &&
           (selectedSubjectId === null ||
             summary.subject_id === selectedSubjectId),
       );
@@ -1037,34 +826,24 @@ export default function Dashboard() {
         )
         .map(Number);
 
-      const averagePercentage =
-        officialTermGrades.length > 0
-          ? officialTermGrades.reduce(
-              (total, grade) => total + grade,
-              0,
-            ) / officialTermGrades.length
-          : null;
+      const { averagePercentage, isProvisional } = summarizeTermPerformance(matchingSummaries, selectedTermKey);
 
-      const assessmentCount = assessmentRecords.filter(
-        (record) =>
-          record.student_id === student.id &&
-          relevantAssessmentIds.has(record.assessment_id),
-      ).length;
+      const assessmentCount = assessmentCountsByStudent.get(student.id) ?? 0;
 
       return {
         ...student,
         averagePercentage,
+        isProvisional,
         assessmentCount,
         officialTermGrades,
       };
     });
   }, [
     displayedStudents,
-    gradeSummaries,
+    summariesByStudent,
     selectedSubjectId,
     selectedTermKey,
-    assessmentRecords,
-    relevantAssessmentIds,
+    assessmentCountsByStudent,
   ]);
 
   const assessedStudents = studentAnalytics.filter(
@@ -1353,7 +1132,7 @@ export default function Dashboard() {
               <LoadingIndicator label="Loading EduLITE..." />
             </div>
           ) : (
-            <>
+            <Suspense fallback={<LoadingIndicator className="py-12" />}>
               {activeView === "interventions" && <InterventionsView students={students} initialDraft={interventionDraft} />}
               {activeView === "yearEnd" && (
                 <YearEndView onFinished={() => fetchDashboardData({ silent: true })} onOpenInsight={openSavedInsight} />
@@ -1399,25 +1178,30 @@ export default function Dashboard() {
                   generatingRecommendationKey={generatingRecommendationKey}
                   gradingRules={gradingRules}
                   openView={openView}
-                  handleRegisterStudent={handleRegisterStudent}
                   handleAddAssessment={handleAddAssessment}
                 />
               )}
 
-              {activeView === "students" && (
-                <StudentsView
+              {activeView === "manageClass" && (
+                <ClassManagementView
                   students={students}
                   sections={sections}
                   subjects={subjects}
-                  onAddStudent={handleRegisterStudent}
-                  onImported={() => fetchDashboardData({ silent: true })}
+                  classes={registeredClasses}
+                  onRefresh={() => fetchDashboardData({ silent: true })}
+                  schoolYearName={activeYearName}
                   onEditStudent={handleEditStudent}
                   onDeleteStudent={handleDeleteStudent}
                   onOpenRecords={(student) => {
                     setSelectedSection(student.section);
                     setSelectedSubject("ALL");
+                    setExpandedStudentId(student.id);
                     openView("records");
                   }}
+                  studentEditorOpen={studentEditorOpen}
+                  studentFormId={studentFormId}
+                  onCancelStudentForm={handleStudentFormCancel}
+                  onSaveStudentForm={handleStudentFormSaved}
                 />
               )}
 
@@ -1459,37 +1243,6 @@ export default function Dashboard() {
                   studentInsightErrors={studentInsightErrors}
                   openSavedInsight={openSavedInsight}
                   reloadStudentInsights={loadStudentInsights}
-                />
-              )}
-
-              {activeView === "sections" && (
-                <SectionManagementView
-                  sections={sections}
-                  newSection={newSection}
-                  setNewSection={setNewSection}
-                  addingSection={addingSection}
-                  handleAddSection={handleAddSection}
-                  handleRemoveSection={handleRemoveSection}
-                  openDashboardForSection={(sectionName) => {
-                    setSelectedSection(sectionName);
-                    openView("dashboard");
-                  }}
-                />
-              )}
-
-              {activeView === "subjects" && (
-                <SubjectManagementView
-                  subjects={subjects}
-                  newSubject={newSubject}
-                  setNewSubject={setNewSubject}
-                  addingSubject={addingSubject}
-                  openSubjectStudentPrompt={openSubjectStudentPrompt}
-                  handleRenameSubject={handleRenameSubject}
-                  handleRemoveSubject={handleRemoveSubject}
-                  openDashboardForSubject={(subjectId) => {
-                    setSelectedSubject(String(subjectId));
-                    openView("dashboard");
-                  }}
                 />
               )}
 
@@ -1536,15 +1289,6 @@ export default function Dashboard() {
                 />
               )}
 
-              {activeView === "studentForm" && (
-                <StudentForm
-                  embedded
-                  studentId={studentFormId}
-                  onCancel={handleStudentFormCancel}
-                  onSaved={handleStudentFormSaved}
-                />
-              )}
-
               {activeView === "assessmentForm" && (
                 <AssessmentForm
                   embedded
@@ -1553,26 +1297,10 @@ export default function Dashboard() {
                   onSaved={handleAssessmentFormSaved}
                 />
               )}
-            </>
+            </Suspense>
           )}
         </main>
       </div>
-
-      {showSubjectStudentPrompt && (
-        <SubjectEnrollmentModal
-          subjectName={newSubject.trim()}
-          students={students}
-          filteredStudents={subjectPromptStudents}
-          searchValue={subjectStudentSearch}
-          setSearchValue={setSubjectStudentSearch}
-          selectedIds={selectedSubjectStudentIds}
-          setSelectedIds={setSelectedSubjectStudentIds}
-          toggleStudent={toggleNewSubjectStudent}
-          addingSubject={addingSubject}
-          closeModal={closeSubjectStudentPrompt}
-          createSubject={handleAddSubject}
-        />
-      )}
 
       {(aiRecommendation || aiRecommendationError) && (
         <AiRecommendationModal
@@ -1587,7 +1315,7 @@ export default function Dashboard() {
       )}
 
       {!loading && tutorialUserId && (
-        <SystemTutorial userId={tutorialUserId} replayRequest={tutorialReplayRequest} />
+        <Suspense fallback={null}><SystemTutorial userId={tutorialUserId} replayRequest={tutorialReplayRequest} /></Suspense>
       )}
 
       <MacNotificationCenter toasts={toasts} onDismiss={dismissToast} />
@@ -1752,6 +1480,10 @@ function DashboardView({
           attention={atRiskStudents.length > 0}
         />
       </section>
+
+      <p className="text-sm text-[var(--ed-color-71808d)]">
+        Learning support updates as scores are recorded. In-progress performance uses available assessments and component weights; unrecorded scores are excluded. Official term grades remain in Term Grades.
+      </p>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_.85fr]">
         <section className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-6 sm:p-7">
@@ -1944,6 +1676,7 @@ function PriorityStudent({
             <p className="truncate font-semibold text-[var(--ed-color-25313c)]">{student.name}</p>
             <p className="mt-1 text-sm text-[var(--ed-color-71808d)]">
               Term {term}: {student.averagePercentage.toFixed(1)}
+              {student.isProvisional && " · In progress"}
             </p>
           </div>
           <button
@@ -1957,173 +1690,6 @@ function PriorityStudent({
         </div>
       ) : (
         <p className="mt-2 text-sm text-[var(--ed-color-8a98a5)]">No student identified.</p>
-      )}
-    </div>
-  );
-}
-
-function StudentsView({
-  students,
-  sections,
-  subjects,
-  onAddStudent,
-  onImported,
-  onEditStudent,
-  onDeleteStudent,
-  onOpenRecords,
-}) {
-  const [search, setSearch] = useState("");
-  const [sectionFilter, setSectionFilter] = useState("ALL");
-
-  const filteredStudents = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    return students.filter((student) => {
-      const matchesSection =
-        sectionFilter === "ALL" || student.section === sectionFilter;
-      const matchesSearch =
-        !query ||
-        `${student.name} ${student.grade} ${student.section} ${
-          student.subjects?.map((subject) => subject.name).join(" ") || ""
-        }`
-          .toLowerCase()
-          .includes(query);
-
-      return matchesSection && matchesSearch;
-    });
-  }, [students, search, sectionFilter]);
-
-  return (
-    <div className="space-y-6">
-      <StudentImport subjects={subjects} onImported={onImported} />
-      <section className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-6 sm:p-7">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">
-              Student Directory
-            </p>
-            <h2 className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)]">
-              {students.length} registered student{students.length === 1 ? "" : "s"}
-            </h2>
-          </div>
-
-          <button
-            type="button"
-            onClick={onAddStudent}
-            className="rounded-[12px] bg-[var(--ed-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--ed-primary-hover)]"
-          >
-            Register student
-          </button>
-        </div>
-
-        <div className="mt-6 grid gap-3 md:grid-cols-[1fr_240px]">
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by name, grade, section, or subject"
-            className="rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-sm text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)]"
-          />
-          <select
-            value={sectionFilter}
-            onChange={(event) => setSectionFilter(event.target.value)}
-            className="rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-sm text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)]"
-          >
-            <option value="ALL">All Sections</option>
-            {sections.map((section) => (
-              <option key={section.id} value={section.name}>
-                {section.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)]">
-        <div className="minimal-scrollbar overflow-x-auto">
-          <table className="w-full min-w-[880px]">
-            <thead className="bg-[var(--ed-color-f8fafb)]">
-              <tr className="border-b border-[var(--ed-color-e3e9ee)]">
-                <TableHeading>Student</TableHeading>
-                <TableHeading align="center">Grade</TableHeading>
-                <TableHeading align="center">Section</TableHeading>
-                <TableHeading>Subjects</TableHeading>
-                <TableHeading align="right">Actions</TableHeading>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--ed-color-eef2f5)]">
-              {filteredStudents.map((student) => (
-                <tr key={student.id} className="hover:bg-[var(--ed-color-fbfcfd)]">
-                  <td className="px-5 py-4 font-semibold text-[var(--ed-color-25313c)]">
-                    {student.name}
-                  </td>
-                  <td className="px-5 py-4 text-center text-sm text-[var(--ed-color-71808d)]">
-                    {student.grade}
-                  </td>
-                  <td className="px-5 py-4 text-center text-sm text-[var(--ed-color-71808d)]">
-                    {student.section}
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex flex-wrap gap-1.5">
-                      {student.subjects?.map((subject) => (
-                        <span
-                          key={subject.id}
-                          className="rounded-full bg-[var(--ed-color-eaf6fc)] px-2.5 py-1 text-xs font-medium text-[var(--ed-color-168cc8)]"
-                        >
-                          {subject.name}
-                        </span>
-                      ))}
-                      {!student.subjects?.length && (
-                        <span className="text-sm text-[var(--ed-color-a0abb4)]">No subjects</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex justify-end gap-3 text-sm font-semibold">
-                      <button
-                        type="button"
-                        onClick={() => onOpenRecords(student)}
-                        className="text-[var(--ed-color-168cc8)] hover:text-[var(--ed-color-0f77aa)]"
-                      >
-                        Records
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onEditStudent(student.id)}
-                        className="text-[var(--ed-color-52616d)] hover:text-[var(--ed-color-25313c)]"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onDeleteStudent(student.id)}
-                        className="text-[var(--ed-color-d94141)] hover:text-[var(--ed-color-b82e2e)]"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
-              {filteredStudents.length === 0 && (
-                <tr>
-                  <td colSpan="5" className="px-6 py-16 text-center text-sm text-[var(--ed-color-8a98a5)]">
-                    {students.length === 0
-                      ? "No students registered yet."
-                      : "No students match the current filters."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {subjects.length === 0 && students.length > 0 && (
-        <p className="rounded-[16px] border border-[var(--ed-color-f1d58b)] bg-[var(--ed-color-fff9e8)] p-4 text-sm text-[var(--ed-color-8a6a12)]">
-          Create at least one subject to complete student enrollment.
-        </p>
       )}
     </div>
   );
@@ -2182,6 +1748,7 @@ function AssessmentsView({
       />
 
       <AssessmentList
+        sections={sections}
         displayedAssessments={displayedAssessments}
         currentSubjectLabel={currentSubjectLabel}
         onEditAssessment={onEditAssessment}
@@ -2234,7 +1801,7 @@ function AiInsightsView({
           {currentSubjectLabel} · {currentSectionLabel} · {currentTermLabel}
         </h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ed-color-71808d)]">
-          Generate teacher-reviewed interventions for learners below {gradingRules.passingGrade} and enrichment recommendations for learners at {gradingRules.highPerformingGrade} or above.
+          Generate teacher-reviewed interventions for learners below {gradingRules.passingGrade} and enrichment recommendations for learners at {gradingRules.highPerformingGrade} or above. In-progress performance uses recorded scores, so support can begin before the term is complete.
         </p>
       </section>
 
@@ -2336,7 +1903,7 @@ export function RecordsView({
   const selectedStudentRecords = selectedStudent
     ? assessments
         .filter((assessment) =>
-          selectedStudent.subject_ids?.includes(assessment.subject_id),
+          selectedStudent.subject_ids?.includes(assessment.subject_id) && assessmentIncludesStudent(assessment, selectedStudent),
         )
         .map((assessment) => {
           const record = assessmentRecords.find(
@@ -2601,7 +2168,7 @@ export function RecordsView({
                 <MinimalMetric
                   label="Performance"
                   value={selectedStatus.label}
-                  detail="Based on the current official term result"
+                  detail={selectedStudent.isProvisional ? "In progress · based on recorded assessments" : "Based on the current official term result"}
                   attention={selectedStudent.averagePercentage !== null && selectedStudent.averagePercentage < 75}
                 />
               </div>
@@ -2782,7 +2349,7 @@ function OfficialGradesTable({ gradeSummaries }) {
       <SectionTitle
         eyebrow="Official Grades"
         title="Three-Term Summary"
-        description="Term Grades are transmuted individually before the final subject grade is calculated."
+        description="Assessment grades are transmuted per term. Imported term grades are already final grades. The final subject grade averages all three terms."
       />
       <div className="mt-5 minimal-scrollbar overflow-x-auto rounded-[18px] border border-[var(--ed-color-e3e9ee)]">
         <table className="w-full min-w-[760px]">
@@ -2800,9 +2367,9 @@ function OfficialGradesTable({ gradeSummaries }) {
             {gradeSummaries.map((summary) => (
               <tr key={summary.subject_id}>
                 <td className="px-5 py-4 font-semibold text-[var(--ed-color-25313c)]">{summary.subject_name}</td>
-                <GradeCell value={summary.term1?.termGrade} />
-                <GradeCell value={summary.term2?.termGrade} />
-                <GradeCell value={summary.term3?.termGrade} />
+                <GradeCell value={summary.term1?.termGrade} source={summary.term1?.source} />
+                <GradeCell value={summary.term2?.termGrade} source={summary.term2?.source} />
+                <GradeCell value={summary.term3?.termGrade} source={summary.term3?.source} />
                 <GradeCell value={summary.final?.finalGrade} accent />
                 <td className="px-5 py-4 text-center text-sm text-[var(--ed-color-71808d)]">
                   {summary.final?.descriptor ?? "—"}
@@ -2823,10 +2390,11 @@ function OfficialGradesTable({ gradeSummaries }) {
   );
 }
 
-function GradeCell({ value, accent = false }) {
+function GradeCell({ value, accent = false, source }) {
   return (
     <td className={`px-5 py-4 text-center font-bold ${accent ? "text-[var(--ed-primary)]" : "text-[var(--ed-color-52616d)]"}`}>
       {value ?? "—"}
+      {source === "imported" && <span className="mt-1 block text-[10px] font-normal text-[var(--ed-muted)]">Imported</span>}
     </td>
   );
 }
@@ -2936,162 +2504,6 @@ function SavedInsightsPanel({ student, insights, loading, error, openSavedInsigh
   );
 }
 
-function SectionManagementView({
-  sections,
-  newSection,
-  setNewSection,
-  addingSection,
-  handleAddSection,
-  handleRemoveSection,
-  openDashboardForSection,
-}) {
-  return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
-      <section className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-6 sm:p-8">
-        <SectionTitle
-          eyebrow="New Section"
-          title="Add a Section"
-          description="Create a section that can be assigned when registering students."
-        />
-        <form onSubmit={handleAddSection} className="mt-7 space-y-4">
-          <label className="block">
-            <span className="mb-2 block text-sm font-semibold text-[var(--ed-color-52616d)]">Section name</span>
-            <ValidatedInput
-              kind="section"
-              label="Section name"
-              required
-              value={newSection}
-              onChange={(event) => setNewSection(event.target.value)}
-              placeholder="e.g. Section 1"
-              className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)]"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={addingSection || !newSection.trim()}
-            className="w-full rounded-[12px] bg-[var(--ed-primary)] px-4 py-3 text-sm font-semibold text-white hover:bg-[var(--ed-primary-hover)] disabled:bg-[var(--ed-color-c8d1d8)]"
-          >
-            {addingSection ? "Adding..." : "Add section"}
-          </button>
-        </form>
-      </section>
-
-      <section className="overflow-hidden rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)]">
-        <div className="flex items-end justify-between gap-4 border-b border-[var(--ed-color-eef2f5)] p-6 sm:p-8">
-          <SectionTitle
-            eyebrow="Existing Sections"
-            title="Section List"
-            description="Open a section on the dashboard or remove it when it is no longer needed."
-          />
-          <span className="text-3xl font-bold text-[var(--ed-primary)]">{sections.length}</span>
-        </div>
-        <div className="minimal-scrollbar max-h-[600px] divide-y divide-[var(--ed-color-eef2f5)] overflow-y-auto">
-          {sections.map((section) => (
-            <div key={section.id} className="flex items-center justify-between gap-4 px-6 py-4 sm:px-8">
-              <button
-                type="button"
-                onClick={() => openDashboardForSection(section.name)}
-                className="min-w-0 text-left"
-              >
-                <p className="truncate font-semibold text-[var(--ed-color-25313c)] hover:text-[var(--ed-color-168cc8)]">{section.name}</p>
-                <p className="mt-1 text-sm text-[var(--ed-color-8a98a5)]">{section.student_count} students</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleRemoveSection(section)}
-                className="text-sm font-semibold text-[var(--ed-color-d94141)] hover:text-[var(--ed-color-b82e2e)]"
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-          {sections.length === 0 && (
-            <EmptyState title="No sections yet" description="Add your first section using the form." />
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function SubjectManagementView({
-  subjects,
-  newSubject,
-  setNewSubject,
-  addingSubject,
-  openSubjectStudentPrompt,
-  handleRenameSubject,
-  handleRemoveSubject,
-  openDashboardForSubject,
-}) {
-  return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
-      <section className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-6 sm:p-8">
-        <SectionTitle
-          eyebrow="New Subject"
-          title="Add a Subject"
-          description="Create a subject, then choose the students who should be enrolled."
-        />
-        <form onSubmit={openSubjectStudentPrompt} className="mt-7 space-y-4">
-          <label className="block">
-            <span className="mb-2 block text-sm font-semibold text-[var(--ed-color-52616d)]">Subject name</span>
-            <ValidatedInput
-              kind="subject"
-              label="Subject name"
-              required
-              value={newSubject}
-              onChange={(event) => setNewSubject(event.target.value)}
-              placeholder="e.g. Mathematics"
-              className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)]"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={addingSubject || !newSubject.trim()}
-            className="w-full rounded-[12px] bg-[var(--ed-primary)] px-4 py-3 text-sm font-semibold text-white hover:bg-[var(--ed-primary-hover)] disabled:bg-[var(--ed-color-c8d1d8)]"
-          >
-            {addingSubject ? "Adding..." : "Choose students"}
-          </button>
-        </form>
-      </section>
-
-      <section className="overflow-hidden rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)]">
-        <div className="flex items-end justify-between gap-4 border-b border-[var(--ed-color-eef2f5)] p-6 sm:p-8">
-          <SectionTitle
-            eyebrow="Existing Subjects"
-            title="Subject List"
-            description="Open, rename, or remove subjects from the workspace."
-          />
-          <span className="text-3xl font-bold text-[var(--ed-primary)]">{subjects.length}</span>
-        </div>
-        <div className="minimal-scrollbar max-h-[600px] divide-y divide-[var(--ed-color-eef2f5)] overflow-y-auto">
-          {subjects.map((subject) => (
-            <div key={subject.id} className="flex items-center justify-between gap-4 px-6 py-4 sm:px-8">
-              <button
-                type="button"
-                onClick={() => openDashboardForSubject(subject.id)}
-                className="min-w-0 text-left"
-              >
-                <p className="truncate font-semibold text-[var(--ed-color-25313c)] hover:text-[var(--ed-color-168cc8)]">{subject.name}</p>
-                <p className="mt-1 text-sm text-[var(--ed-color-8a98a5)]">
-                  {subject.student_count} students · {subject.assessment_count} assessments
-                </p>
-              </button>
-              <div className="flex shrink-0 gap-3 text-sm font-semibold">
-                <button type="button" onClick={() => handleRenameSubject(subject)} className="text-[var(--ed-color-168cc8)] hover:text-[var(--ed-color-0f77aa)]">Rename</button>
-                <button type="button" onClick={() => handleRemoveSubject(subject)} className="text-[var(--ed-color-d94141)] hover:text-[var(--ed-color-b82e2e)]">Delete</button>
-              </div>
-            </div>
-          ))}
-          {subjects.length === 0 && (
-            <EmptyState title="No subjects yet" description="Add your first subject using the form." />
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
-
 function DashboardFilters({
   sections,
   subjects,
@@ -3156,6 +2568,7 @@ function FilterSelect({ label, value, onChange, options }) {
 }
 
 function AssessmentList({
+  sections,
   displayedAssessments,
   currentSubjectLabel,
   onEditAssessment,
@@ -3185,6 +2598,7 @@ function AssessmentList({
                 <td className="px-5 py-4">
                   <p className="font-semibold text-[var(--ed-color-25313c)]">{assessment.name}</p>
                   <p className="mt-1 text-xs text-[var(--ed-color-8a98a5)]">{assessment.date}</p>
+                  <p className="mt-1 text-xs text-[var(--ed-color-8a98a5)]">{assessment.class_sections?.length ? assessment.class_sections.map((entry) => `Grade ${entry.grade} · ${sections.find((section) => section.id === entry.section_id)?.name ?? "Unavailable section"}`).join(", ") : "All enrolled sections"}</p>
                 </td>
                 <td className="px-5 py-4 text-sm text-[var(--ed-color-71808d)]">{assessment.subject_name}</td>
                 <td className="px-5 py-4 text-center text-sm text-[var(--ed-color-71808d)]">{assessment.term_label ?? `Term ${assessment.term}`}</td>
@@ -3207,89 +2621,6 @@ function AssessmentList({
         </table>
       </div>
     </section>
-  );
-}
-
-function SubjectEnrollmentModal({
-  subjectName,
-  students,
-  filteredStudents,
-  searchValue,
-  setSearchValue,
-  selectedIds,
-  setSelectedIds,
-  toggleStudent,
-  addingSubject,
-  closeModal,
-  createSubject,
-}) {
-  const allSelected = students.length > 0 && selectedIds.length === students.length;
-
-  return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#25313C]/35 p-4 backdrop-blur-[4px]">
-      <div className="w-full max-w-3xl overflow-hidden rounded-[26px] border border-white bg-[var(--ed-surface)] shadow-[0_24px_70px_rgba(37,49,60,0.24)]">
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--ed-color-eef2f5)] p-6">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">Subject Enrollment</p>
-            <h2 className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)]">{subjectName}</h2>
-            <p className="mt-1 text-sm text-[var(--ed-color-71808d)]">Choose the students who should be enrolled.</p>
-          </div>
-          <button type="button" onClick={closeModal} className="flex h-9 w-9 !min-h-0 items-center justify-center rounded-full text-xl text-[var(--ed-color-8a98a5)] hover:bg-[var(--ed-color-f4f7fa)]">×</button>
-        </div>
-
-        <div className="p-6">
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <input
-              type="search"
-              value={searchValue}
-              onChange={(event) => setSearchValue(event.target.value)}
-              placeholder="Search students"
-              className="flex-1 rounded-[12px] border border-[var(--ed-color-d8e1e7)] px-4 py-2.5 text-sm outline-none focus:border-[var(--ed-primary)]"
-            />
-            <button
-              type="button"
-              onClick={() => setSelectedIds(allSelected ? [] : students.map((student) => student.id))}
-              className="rounded-[12px] border border-[var(--ed-color-d8e1e7)] px-4 py-2.5 text-sm font-semibold text-[var(--ed-color-52616d)] hover:border-[var(--ed-primary)] hover:text-[var(--ed-color-168cc8)]"
-            >
-              {allSelected ? "Clear all" : "Select all"}
-            </button>
-          </div>
-
-          <div className="minimal-scrollbar mt-4 max-h-[440px] divide-y divide-[var(--ed-color-eef2f5)] overflow-y-auto rounded-[16px] border border-[var(--ed-color-e3e9ee)]">
-            {filteredStudents.map((student) => {
-              const selected = selectedIds.includes(student.id);
-              return (
-                <label key={student.id} className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-[var(--ed-color-fbfcfd)]">
-                  <input
-                    type="checkbox"
-                    checked={selected}
-                    onChange={() => toggleStudent(student.id)}
-                    className="h-4 w-4 accent-[var(--ed-primary)]"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-[var(--ed-color-25313c)]">{student.name}</p>
-                    <p className="mt-0.5 text-xs text-[var(--ed-color-8a98a5)]">Grade {student.grade} · {student.section}</p>
-                  </div>
-                </label>
-              );
-            })}
-            {filteredStudents.length === 0 && (
-              <p className="px-4 py-12 text-center text-sm text-[var(--ed-color-8a98a5)]">No students found.</p>
-            )}
-          </div>
-
-          <div className="mt-5 flex items-center justify-between gap-4">
-            <p className="text-sm text-[var(--ed-color-71808d)]">{selectedIds.length} selected</p>
-            <div className="flex gap-2">
-              <button type="button" onClick={closeModal} disabled={addingSubject} className="rounded-[12px] border border-[var(--ed-color-d8e1e7)] px-4 py-2.5 text-sm font-semibold text-[var(--ed-color-52616d)]">Cancel</button>
-              <button type="button" onClick={createSubject} disabled={addingSubject} className="rounded-[12px] bg-[var(--ed-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--ed-primary-hover)] disabled:opacity-50">
-                {addingSubject ? "Creating..." : "Create subject"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -3350,7 +2681,7 @@ function InsightList({
             <div key={student.id} className="flex items-center justify-between gap-4 px-6 py-4">
               <div className="min-w-0">
                 <p className="truncate font-semibold text-[var(--ed-color-25313c)]">{student.name}</p>
-                <p className="mt-1 text-sm text-[var(--ed-color-71808d)]">{student.section} · {student.averagePercentage.toFixed(1)}</p>
+                <p className="mt-1 text-sm text-[var(--ed-color-71808d)]">{student.section} · {student.averagePercentage.toFixed(1)}{student.isProvisional && " · In progress"}</p>
               </div>
               <button
                 type="button"
@@ -3418,7 +2749,7 @@ function AiRecommendationModal({ recommendation, error, closeModal, onAssignActi
             <div className="space-y-8">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <MinimalInfo label="Classification" value={recommendation?.classification || "—"} />
-                <MinimalInfo label="Focus Average" value={formatPercentage(recommendation?.analytics?.focusAveragePercentage)} />
+                <MinimalInfo label={recommendation?.analytics?.isProvisional ? "Focus Average · In progress" : "Focus Average"} value={formatPercentage(recommendation?.analytics?.focusAveragePercentage)} />
                 <MinimalInfo label="Section Average" value={formatPercentage(recommendation?.analytics?.sectionComparison?.sectionAveragePercentage)} />
                 <MinimalInfo label="Recent Trend" value={recommendation?.analytics?.recentTrend?.label || "—"} />
               </div>
@@ -3447,6 +2778,15 @@ function AiRecommendationModal({ recommendation, error, closeModal, onAssignActi
                   <div className="space-y-4">
                     {plan.targetedInterventions.map((item, index) => (
                       <RecommendationCard key={`${item.title}-${index}`} index={index + 1} title={item.title} description={item.rationale}>
+                        {item.learningFocus && <div className="mt-3"><PlanDetail label="Learning focus" value={item.learningFocus} /></div>}
+                        {item.curriculumBasis?.length > 0 && <details className="mt-4 rounded-xl border border-[var(--ed-color-e3e9ee)] p-4 text-sm">
+                          <summary className="cursor-pointer font-semibold text-[var(--ed-color-25313c)]">Assessment and Budget of Work basis</summary>
+                          <div className="mt-3 space-y-4">{item.curriculumBasis.map((source) => <div key={source.assessmentId}>
+                            <p className="font-semibold">{source.subject} · {source.assessment} · Term {source.term}</p>
+                            <p className="mt-1 text-[var(--ed-color-71808d)]">{source.score === null ? "Score not recorded" : `Recorded score: ${source.score}/${source.totalItems}`}</p>
+                            <p className="mt-2 whitespace-pre-wrap text-[var(--ed-color-52616d)]">{source.budgetOfWork || "Budget of Work was not provided. Confirm the curriculum scope with the teacher."}</p>
+                          </div>)}</div>
+                        </details>}
                         {item.actions?.length > 0 && (
                           <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-[var(--ed-color-52616d)]">
                             {item.actions.map((action, actionIndex) => <li key={`${action}-${actionIndex}`}>{action}</li>)}

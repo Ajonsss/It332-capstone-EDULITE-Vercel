@@ -1,8 +1,6 @@
 export const NAVIGATION_ITEMS = [
   { view: "dashboard", label: "Dashboard", icon: "dashboard" },
-  { view: "sections", label: "Sections", icon: "category" },
-  { view: "subjects", label: "Subjects", icon: "menu_book" },
-  { view: "students", label: "Students", icon: "groups", relatedViews: ["studentForm"] },
+  { view: "manageClass", label: "Manage your class", icon: "groups" },
   { view: "assessments", label: "Assessments", icon: "assignment", relatedViews: ["assessmentForm"] },
   { view: "records", label: "Records", icon: "table_view" },
   { view: "interventions", label: "Interventions", icon: "intervention" },

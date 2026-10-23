@@ -5,6 +5,7 @@ import Student from "./models/Student.js";
 import Section from "./models/Section.js";
 import Subject from "./models/Subject.js";
 import Assessment from "./models/Assessment.js";
+import { assessmentIncludesStudent } from "../shared/assessmentScope.mjs";
 import AssessmentScore from "./models/AssessmentScore.js";
 import Intervention from "./models/Intervention.js";
 import AwardCertificate from "./models/AwardCertificate.js";
@@ -594,7 +595,7 @@ router.put(
             },
           });
 
-        if (!assessment) {
+        if (!assessment || !assessmentIncludesStudent(assessment, student)) {
           return res.status(400).json({
             message:
               "An assessment is not available for this student.",

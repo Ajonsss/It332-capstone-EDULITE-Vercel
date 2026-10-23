@@ -22,8 +22,10 @@
     "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.3",
+    "jszip": "^3.10.2",
     "mongoose": "^8.24.2",
     "multer": "^2.4.0",
-    "pdfkit": "^0.19.1"
+    "pdfkit": "^0.19.1",
+    "saxes": "^5.0.1"
   }
 }
