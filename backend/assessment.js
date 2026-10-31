@@ -725,12 +725,7 @@ function formatAssessment(
   ============================================================
 */
 
-router.get(
-  "/assessment-records",
-
-  requireAuth,
-
-  async (req, res) => {
+export async function listAssessmentRecords(req, res) {
     try {
       const ownerId =
         req.user.id;
@@ -966,8 +961,9 @@ router.get(
             "Unable to load assessment records.",
         });
     }
-  },
-);
+}
+
+router.get("/assessment-records", requireAuth, listAssessmentRecords);
 
 /*
   ============================================================
@@ -975,12 +971,7 @@ router.get(
   ============================================================
 */
 
-router.get(
-  "/grade-summaries",
-
-  requireAuth,
-
-  async (req, res) => {
+export async function listGradeSummaries(req, res) {
     try {
       const ownerId =
         req.user.id;
@@ -1286,8 +1277,9 @@ router.get(
             "Unable to calculate grade summaries.",
         });
     }
-  },
-);
+}
+
+router.get("/grade-summaries", requireAuth, listGradeSummaries);
 
 /*
   ============================================================
@@ -1295,12 +1287,7 @@ router.get(
   ============================================================
 */
 
-router.get(
-  "/assessments",
-
-  requireAuth,
-
-  async (req, res) => {
+export async function listAssessments(req, res) {
     try {
       const ownerId =
         req.user.id;
@@ -1400,33 +1387,14 @@ router.get(
           })
           .lean();
 
-      const results =
-        await Promise.all(
-          assessments
-            .filter(
-              (assessment) =>
-                assessment.subjectId,
-            )
-            .map(
-              async (
-                assessment,
-              ) => {
-                const scoreCount =
-                  await AssessmentScore
-                    .countDocuments({
-                      ownerId,
-
-                      assessmentId:
-                        assessment._id,
-                    });
-
-                return formatAssessment(
-                  assessment,
-                  scoreCount,
-                );
-              },
-            ),
-        );
+      const visibleAssessments = assessments.filter((assessment) => assessment.subjectId);
+      const scoreRows = visibleAssessments.length ? await AssessmentScore.find({ ownerId, assessmentId: { $in: visibleAssessments.map((assessment) => assessment._id) } }).select("assessmentId").lean() : [];
+      const scoreCounts = new Map();
+      for (const score of scoreRows) {
+        const key = String(score.assessmentId);
+        scoreCounts.set(key, (scoreCounts.get(key) ?? 0) + 1);
+      }
+      const results = visibleAssessments.map((assessment) => formatAssessment(assessment, scoreCounts.get(String(assessment._id)) ?? 0));
 
       return res.json(results);
     } catch (error) {
@@ -1442,8 +1410,9 @@ router.get(
             "Unable to load assessments.",
         });
     }
-  },
-);
+}
+
+router.get("/assessments", requireAuth, listAssessments);
 
 /*
   ============================================================

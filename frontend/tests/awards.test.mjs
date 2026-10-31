@@ -54,7 +54,10 @@ test("teacher creates reviewed certificate batches and prints only on request", 
   const control = (label) => document.querySelector(`[aria-label="${label}"]`);
   const click = (text) => React.act(() => [...document.querySelectorAll("button")].find((button) => button.textContent.includes(text)).click());
   assert.equal(control("Award recipient Carlo").disabled, true);
+  assert.equal(control("Award term"), null);
+  await React.act(() => control("Open filters and sorting").click());
   await React.act(() => { control("Award term").value = "2"; control("Award term").dispatchEvent(new dom.window.Event("change", { bubbles: true })); });
+  await React.act(() => control("Close filters and sorting").click());
   await click("Select all eligible");
   assert.equal(control("Award recipient Alice").checked, true);
   assert.equal(control("Award recipient Bob").checked, true);
@@ -73,7 +76,9 @@ test("teacher creates reviewed certificate batches and prints only on request", 
   assert.equal(printed, 0);
   await click("Print certificates");
   assert.equal(printed, 1);
+  await React.act(() => control("Open filters and sorting").click());
   await React.act(() => { control("Award section").value = "Lily"; control("Award section").dispatchEvent(new dom.window.Event("change", { bubbles: true })); });
+  await React.act(() => control("Close filters and sorting").click());
   assert.equal(control("Award recipient Carlo").checked, false);
   // Already generated certificates retain their reviewed snapshot until recreated.
   assert.equal(document.querySelectorAll(".awards-print-root .award-certificate").length, 3);

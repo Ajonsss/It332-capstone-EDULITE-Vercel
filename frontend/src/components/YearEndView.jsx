@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import axios from "axios";
 import LoadingIndicator from "./LoadingIndicator";
+import FilterSidebar from "./FilterSidebar";
 
 import { API_URL as API } from "../utils/api.js";
 const fieldClass = "mt-1 w-full rounded-xl border border-[var(--ed-border)] bg-[var(--ed-surface)] px-3 py-2.5";
@@ -70,10 +71,18 @@ export default function YearEndView({ onFinished, onOpenInsight }) {
     <section className="rounded-[22px] border border-[var(--ed-border)] bg-[var(--ed-surface)] p-6">
       <h2 className="text-xl font-bold">Year-end review</h2>
       <p className="mt-2 text-sm leading-6 text-[var(--ed-muted)]">Review all enrolled subjects across Terms 1–3. Readiness follows the active school year’s grading and promotion rules in Settings. Review these recommendations before confirming promotion or graduation.</p>
-      <div className="mt-5 flex flex-wrap gap-3 text-sm">
-        <span className="rounded-xl bg-[var(--ed-accent-soft)] px-4 py-3">Ready for review: {reports.filter((student) => student.status === "ready").length}</span>
-        <span className="rounded-xl bg-[var(--ed-warning-soft)] px-4 py-3">Further intervention: {reports.filter((student) => student.status === "intervention").length}</span>
-        <span className="rounded-xl bg-[var(--ed-subtle)] px-4 py-3">Pending results: {reports.filter((student) => student.status === "pending").length}</span>
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        {[
+          { status: "ready", title: "Ready for review", description: "Complete results meet the promotion rules.", color: "bg-[var(--ed-accent-soft)]" },
+          { status: "intervention", title: "Further intervention", description: "Review subjects that need more support.", color: "bg-[var(--ed-warning-soft)]" },
+          { status: "pending", title: "Pending results", description: "Complete missing results before the final review.", color: "bg-[var(--ed-subtle)]" },
+        ].map((item) => <div key={item.status} className={`flex items-center gap-4 rounded-xl p-4 ${item.color}`}>
+          <p className="shrink-0 text-4xl font-extrabold tabular-nums">{reports.filter((student) => student.status === item.status).length}</p>
+          <div className="min-w-0">
+          <h3 className="font-semibold">{item.title}</h3>
+          <p className="mt-1 text-sm leading-5 text-[var(--ed-muted)]">{item.description}</p>
+          </div>
+        </div>)}
       </div>
       <div className="mt-5 flex gap-2" role="group" aria-label="Year-end views">
         {[['review', 'Review students'], ['archives', 'Archives']].map(([value, label]) => <button key={value} type="button" disabled={saving} aria-pressed={tab === value} onClick={() => { setTab(value); setSearch(""); setError(""); }} className={`rounded-xl border px-4 py-2 text-sm font-semibold ${tab === value ? "border-[var(--ed-primary)] bg-[var(--ed-accent-soft)] text-[var(--ed-accent-text)]" : "border-[var(--ed-border)]"}`}>{label}</button>)}
@@ -83,10 +92,20 @@ export default function YearEndView({ onFinished, onOpenInsight }) {
     {message && <p role="status" className="rounded-xl bg-[var(--ed-accent-soft)] p-4">{message}</p>}
     {printReport && createPortal(<div className="year-end-print-root"><PrintableYearEnd report={printReport} /></div>, document.body)}
     {loading ? <LoadingIndicator label="Loading year-end records…" className="py-8" /> : <>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {tab === "review" && <button type="button" disabled={!matching.length} className="rounded-xl border border-[var(--ed-border)] px-4 py-2 text-sm" onClick={() => { flushSync(() => setPrintReport({ type: "class", students: matching, title: "Year-end class report", schoolYear: activeYearName })); window.print(); }}>Print class report / save PDF</button>}
-        <input type="search" aria-label="Search year-end students" placeholder="Search name, section, grade, or school year" className={`${fieldClass} max-w-md`} value={search} onChange={(event) => setSearch(event.target.value)} />
-        {tab === "review" && <select aria-label="Year-end status" className={`${fieldClass} max-w-xs`} value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">All recommendations</option><option value="ready">Ready for review</option><option value="intervention">Further intervention</option><option value="pending">Pending results</option></select>}
+        <div className="ml-auto">
+          <FilterSidebar key={tab} title={tab === "review" ? "Filter year-end students" : "Filter archives"}
+            activeCount={[Boolean(search.trim()), tab === "review" && status !== "ALL"].filter(Boolean).length}
+            onReset={() => { setSearch(""); setStatus("ALL"); }}>
+            <label className="block text-sm font-semibold">Search students
+              <input type="search" aria-label="Search year-end students" placeholder="Name, section, grade, or school year" className={fieldClass} value={search} onChange={(event) => setSearch(event.target.value)} />
+            </label>
+            {tab === "review" && <label className="block text-sm font-semibold">Recommendation
+              <select aria-label="Year-end status" className={fieldClass} value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">All recommendations</option><option value="ready">Ready for review</option><option value="intervention">Further intervention</option><option value="pending">Pending results</option></select>
+            </label>}
+          </FilterSidebar>
+        </div>
       </div>
       <section className="overflow-hidden rounded-[22px] border border-[var(--ed-border)] bg-[var(--ed-surface)]">
         {matching.map((student) => <button key={student.id} type="button" disabled={saving} aria-label={`Review ${student.name}`} onClick={() => {

@@ -1,4 +1,3 @@
-import PasswordRecovery from "./PasswordRecovery";
 import LoadingIndicator from "./LoadingIndicator";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -8,12 +7,12 @@ import { validateInput } from "../../../shared/inputValidation.mjs";
 
 import { API_URL } from "../utils/api.js";
 import { usePageTitle } from "../utils/usePageTitle.js";
+import { loadDashboard } from "../utils/loadDashboard.js";
 
 const APPLE_FONT =
   '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
 
 export default function Login() {
-  const [showRecovery, setShowRecovery] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -22,7 +21,7 @@ export default function Login() {
   const [errorVisible, setErrorVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  usePageTitle(showRecovery ? "Recover Account" : isLoginMode ? "Sign In" : "Create Account");
+  usePageTitle(isLoginMode ? "Sign In" : "Create Account");
 
   const navigate = useNavigate();
 
@@ -72,6 +71,7 @@ export default function Login() {
     }
 
     setSubmitting(true);
+    void loadDashboard().catch(() => {});
 
     const endpoint = isLoginMode
       ? "/login"
@@ -179,7 +179,7 @@ export default function Login() {
         }
 
         .edulite-login button:not(:disabled):active {
-          transform: scale(0.98);
+          transform: scale(0.99);
         }
 
         .edulite-login input {
@@ -197,7 +197,7 @@ export default function Login() {
         .login-page-enter {
           animation:
             login-page-in
-            520ms
+            180ms
             cubic-bezier(0.2, 0.8, 0.2, 1)
             both;
         }
@@ -205,7 +205,7 @@ export default function Login() {
         .login-form-enter {
           animation:
             login-form-in
-            560ms
+            220ms
             cubic-bezier(0.2, 0.8, 0.2, 1)
             both;
         }
@@ -253,7 +253,7 @@ export default function Login() {
             opacity: 0;
 
             transform:
-              translateY(14px);
+              translateY(6px);
           }
 
           to {
@@ -349,11 +349,7 @@ export default function Login() {
             </div>
 
             <div className="hidden max-w-[720px] py-12 md:block lg:py-0">
-              <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[var(--ed-color-0091ff)]">
-                Student Learning Workspace
-              </p>
-
-              <h1 className="mt-5 text-[clamp(3.4rem,7vw,7.5rem)] font-bold leading-[0.84] tracking-[-0.065em] text-[var(--ed-color-0091ff)]">
+              <h1 className="text-[clamp(3.4rem,7vw,7.5rem)] font-bold leading-[0.84] tracking-[-0.065em] text-[var(--ed-color-0091ff)]">
                 EduLITE:
 
                 <span className="mt-2 block text-[#3AAAE8]">
@@ -383,13 +379,7 @@ export default function Login() {
           <section className="flex items-center border-t border-[var(--ed-color-eceff2)] bg-[var(--ed-color-fafbfc)] px-6 py-6 sm:px-10 md:py-10 lg:min-h-screen lg:border-l lg:border-t-0 lg:px-14 xl:px-20">
             <div className="login-form-enter mx-auto w-full max-w-[460px]">
               <div className="mb-6 md:mb-10">
-                <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-color-0091ff)]">
-                  {isLoginMode
-                    ? "Welcome Back"
-                    : "Create Account"}
-                </p>
-
-                <h2 className="mt-3 text-4xl font-bold tracking-[-0.04em] text-[var(--ed-color-36454f)] sm:text-5xl">
+                <h2 className="text-4xl font-bold tracking-[-0.04em] text-[var(--ed-color-36454f)] sm:text-5xl">
                   {isLoginMode
                     ? "Sign in."
                     : "Get started."}
@@ -555,8 +545,6 @@ export default function Login() {
                       : "Create Account"}
                 </button>
               </form>
-              {isLoginMode && <button type="button" className="mt-4 text-sm font-semibold text-[var(--ed-accent-text)]" onClick={() => setShowRecovery((current) => !current)}>Forgot password?</button>}
-              {showRecovery && <PasswordRecovery onClose={() => setShowRecovery(false)} />}
 
               <p className="mt-7 text-sm text-[var(--ed-color-7a7a7f)]">
                 {isLoginMode

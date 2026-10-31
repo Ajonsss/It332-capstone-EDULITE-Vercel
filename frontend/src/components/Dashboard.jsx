@@ -4,8 +4,11 @@ import axios from "axios";
 import ValidatedInput from "./ValidatedInput";
 import { parseWholeNumber } from "../../../shared/inputValidation.mjs";
 import RecordPerformanceSummary from "./RecordPerformanceSummary";
+import InsightCompletionControl from "./InsightCompletionControl";
+import FilterSidebar from "./FilterSidebar";
 import MobileNavigation from "./MobileNavigation";
 import LoadingIndicator from "./LoadingIndicator";
+import ClassSidePanel from "./ClassSidePanel";
 import { NAVIGATION_ITEMS, isNavigationItemActive } from "../utils/navigation.js";
 import { usePageTitle } from "../utils/usePageTitle.js";
 import { buildPerformanceRoster, getPerformanceStatus, hasPerformanceGrade, PERFORMANCE_LEVELS, summarizeTermPerformance } from "../utils/performance";
@@ -15,14 +18,13 @@ import { assessmentIncludesStudent } from "../../../shared/assessmentScope.mjs";
 
 const SystemTutorial = lazy(() => import("./SystemTutorial"));
 const SettingsView = lazy(() => import("./SettingsView"));
-const InterventionsView = lazy(() => import("./InterventionsView"));
 const YearEndView = lazy(() => import("./YearEndView"));
 const AwardsView = lazy(() => import("./AwardsView"));
 const ClassManagementView = lazy(() => import("./ClassManagementView"));
 const AssessmentForm = lazy(() => import("./AssessmentForm"));
+const StudentForm = lazy(() => import("./StudentForm"));
 
 const PAGE_DETAILS = {
-  interventions: { title: "Intervention Progress", description: "Assign practice activities and track completion and learning gains." },
   yearEnd: { title: "Year-End & Archives", description: "Review promotion and intervention needs, finish year levels, and revisit archived student records." },
   awards: { title: "Awards & Certificates", description: "Recognize student achievement and improvement with printable certificates." },
   settings: { title: "Settings", description: "Manage your EduLITE preferences and replay the getting-started tutorial." },
@@ -76,12 +78,14 @@ export default function Dashboard() {
   const toastTimersRef = useRef(new Map());
   const [editingStudentId, setEditingStudentId] = useState(null);
   const [editedScores, setEditedScores] = useState({});
+  const [recordsEditVersion, setRecordsEditVersion] = useState(0);
   const [savingScores, setSavingScores] = useState(false);
   const [tutorialUserId, setTutorialUserId] = useState(null);
   const [tutorialReplayRequest, setTutorialReplayRequest] = useState(0);
   const [activeView, setActiveView] = useState("dashboard");
   const [studentFormId, setStudentFormId] = useState(null);
   const [studentEditorOpen, setStudentEditorOpen] = useState(false);
+  const [deletingStudentId, setDeletingStudentId] = useState(null);
   const [assessmentFormId, setAssessmentFormId] = useState(null);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -96,7 +100,6 @@ export default function Dashboard() {
       : true;
   });
 
-  const [interventionDraft, setInterventionDraft] = useState(null);
   const [aiRecommendation, setAiRecommendation] = useState(null);
   const [aiRecommendationError, setAiRecommendationError] = useState("");
   const [generatingRecommendationKey, setGeneratingRecommendationKey] =
@@ -261,41 +264,21 @@ export default function Dashboard() {
     }
 
     try {
-      const [
-        studentResponse,
-        sectionResponse,
-        subjectResponse,
-        assessmentResponse,
-        recordResponse,
-        gradeSummaryResponse,
-        schoolYearResponse,
-        rulesResponse,
-        classResponse,
-      ] = await Promise.all([
-        axios.get(`${API_URL}/students`),
-        axios.get(`${API_URL}/sections`),
-        axios.get(`${API_URL}/subjects`),
-        axios.get(`${API_URL}/assessments`),
-        axios.get(`${API_URL}/assessment-records`),
-        axios.get(`${API_URL}/grade-summaries`),
-        axios.get(`${API_URL}/school-years`),
-        axios.get(`${API_URL}/grading-rules`),
-        axios.get(`${API_URL}/classes`),
-      ]);
-
-      setActiveYearName(schoolYearResponse.data.years.find((year) => String(year._id ?? "") === String(schoolYearResponse.data.activeId ?? ""))?.name ?? "School year");
-      setGradingRules(rulesResponse.data);
-      setStudents(studentResponse.data);
-      setSections(sectionResponse.data);
-      setSubjects(subjectResponse.data);
-      setRegisteredClasses(classResponse.data ?? []);
-      setAssessments(assessmentResponse.data);
-      setAssessmentRecords(recordResponse.data);
-      setGradeSummaries(gradeSummaryResponse.data ?? []);
-
+      const { data } = await axios.get(`${API_URL}/dashboard`);
+      const { students: loadedStudents, sections: loadedSections, subjects: loadedSubjects, assessments: loadedAssessments,
+        assessmentRecords: loadedRecords, gradeSummaries: loadedSummaries, schoolYears, gradingRules: loadedRules, classes: loadedClasses } = data;
+      setActiveYearName(schoolYears.years.find((year) => String(year._id ?? "") === String(schoolYears.activeId ?? ""))?.name ?? "School year");
+      setGradingRules(loadedRules);
+      setStudents(loadedStudents);
+      setSections(loadedSections);
+      setSubjects(loadedSubjects);
+      setRegisteredClasses(loadedClasses ?? []);
+      setAssessments(loadedAssessments);
+      setAssessmentRecords(loadedRecords);
+      setGradeSummaries(loadedSummaries ?? []);
       if (
         selectedSection !== "ALL" &&
-        !sectionResponse.data.some(
+        !loadedSections.some(
           (section) => section.name === selectedSection,
         )
       ) {
@@ -304,7 +287,7 @@ export default function Dashboard() {
 
       if (
         selectedSubject !== "ALL" &&
-        !subjectResponse.data.some(
+        !loadedSubjects.some(
           (subject) => String(subject.id) === String(selectedSubject),
         )
       ) {
@@ -348,6 +331,7 @@ export default function Dashboard() {
   };
 
   const handleDeleteStudent = async (studentId) => {
+    if (deletingStudentId) return;
     if (
       !window.confirm(
         "Remove this student, their scores, learning insights, and intervention records? Issued certificates remain in award history.",
@@ -358,15 +342,19 @@ export default function Dashboard() {
 
     setError("");
     setSuccess("");
+    setDeletingStudentId(studentId);
 
     try {
       await axios.delete(`${API_URL}/students/${studentId}`);
+      setStudentInsightsById((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== studentId)));
 
       await fetchDashboardData({ silent: true });
 
       setSuccess("Student deleted successfully.");
     } catch (err) {
       setError(err.response?.data?.message || "Unable to delete the student.");
+    } finally {
+      setDeletingStudentId(null);
     }
   };
 
@@ -394,7 +382,7 @@ export default function Dashboard() {
   const handleEditStudent = (studentId) => {
     setStudentFormId(studentId);
     setStudentEditorOpen(true);
-    setActiveView("manageClass");
+    if (activeView !== "records") setActiveView("manageClass");
     setError("");
     setSuccess("");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -403,14 +391,12 @@ export default function Dashboard() {
   const handleStudentFormCancel = () => {
     setStudentFormId(null);
     setStudentEditorOpen(false);
-    openView("manageClass");
   };
 
   const handleStudentFormSaved = async (_result, details) => {
     await fetchDashboardData({ silent: true });
     setStudentFormId(null);
     setStudentEditorOpen(false);
-    setActiveView("manageClass");
     setError("");
     setSuccess(
       details?.isEditing
@@ -557,6 +543,8 @@ export default function Dashboard() {
         focusLabel: insight.focusLabel,
         model: insight.model,
         title: insight.title,
+        status: insight.status,
+        completedAt: insight.completedAt,
         createdAt: insight.createdAt,
         pdfUrl: insight.pdfUrl,
       },
@@ -604,6 +592,53 @@ export default function Dashboard() {
   const toggleStudentProfile = async (student) => {
     setExpandedStudentId(student.id);
     await loadStudentInsights(student.id);
+  };
+
+  const handleDeleteInsight = async (studentId, insightId) => {
+    await axios.delete(`${API_URL}/gemini/insights/${insightId}`);
+    setStudentInsightsById((current) => ({ ...current, [studentId]: (current[studentId] ?? []).filter((insight) => insight.id !== insightId) }));
+    if (aiRecommendation?.savedInsight?.id === insightId) closeAiRecommendation();
+  };
+
+  const handleFinishInsight = async (insight) => {
+    const { data: updated } = await axios.patch(`${API_URL}/gemini/insights/${insight.id}/finish`);
+    setStudentInsightsById((current) => Object.prototype.hasOwnProperty.call(current, updated.studentId)
+      ? { ...current, [updated.studentId]: current[updated.studentId].map((item) => item.id === updated.id ? { ...item, ...updated } : item) }
+      : current);
+    setAiRecommendation((current) => current?.savedInsight?.id === updated.id ? { ...current, savedInsight: { ...current.savedInsight, ...updated } } : current);
+
+    const student = students.find((item) => String(item.id) === String(updated.studentId));
+    if (!window.confirm(`Intervention finished. Would you like to update ${student?.name ?? "this student"}'s grades from previous assessments?`)) return;
+    if (!student) {
+      setError("The intervention is closed, but this student is no longer in the active student list.");
+      return;
+    }
+    if (savingScores) {
+      setError("The intervention is closed. Wait for the current score changes to finish saving before editing grades.");
+      return;
+    }
+    if (editingStudentId && !window.confirm("Replace the unsaved score edits with this student's previous assessment scores?")) return;
+
+    const insightTerm = Number(updated.result?.analytics?.gradingTerm);
+    const term = [1, 2, 3].includes(insightTerm) ? String(insightTerm) : selectedTerm;
+    const focusSubjectId = updated.focusSubjectId && student.subject_ids?.includes(updated.focusSubjectId) ? updated.focusSubjectId : null;
+    const previousAssessments = assessments.filter((assessment) => Number(assessment.term) === Number(term)
+      && (!focusSubjectId || assessment.subject_id === focusSubjectId)
+      && student.subject_ids?.includes(assessment.subject_id) && assessmentIncludesStudent(assessment, student));
+
+    closeAiRecommendation();
+    setSelectedSection(student.section || "ALL");
+    setSelectedSubject(focusSubjectId ?? "ALL");
+    setSelectedTerm(term);
+    setExpandedStudentId(student.id);
+    setRecordsEditVersion((current) => current + 1);
+    openView("records");
+    void loadStudentInsights(student.id);
+    if (previousAssessments.length) startEditingScores(student, previousAssessments);
+    else {
+      setEditingStudentId(null); setEditedScores({});
+      setError("No previous assessments are available for this student's intervention subject and term.");
+    }
   };
 
   const displayedAssessments = useMemo(() => {
@@ -671,10 +706,10 @@ export default function Dashboard() {
       student.subject_ids?.includes(assessment.subject_id) && assessmentIncludesStudent(assessment, student),
     );
 
-  const startEditingScores = (student) => {
+  const startEditingScores = (student, studentAssessments = getStudentAssessments(student)) => {
     const currentScores = {};
 
-    for (const assessment of getStudentAssessments(student)) {
+    for (const assessment of studentAssessments) {
       const currentScore = scoreMap[student.id]?.[assessment.id];
 
       currentScores[assessment.id] =
@@ -960,7 +995,7 @@ export default function Dashboard() {
 
         .edulite-shell button:not(:disabled):active,
         .edulite-shell [role="button"]:active {
-          transform: scale(0.98);
+          transform: scale(0.99);
         }
 
         .edulite-shell :where(button, input, select, textarea, a):focus-visible {
@@ -997,7 +1032,7 @@ export default function Dashboard() {
         @keyframes mac-notification-in {
           from {
             opacity: 0;
-            transform: translate3d(28px, -8px, 0) scale(0.97);
+            transform: translate3d(8px, -4px, 0);
           }
           to {
             opacity: 1;
@@ -1012,18 +1047,18 @@ export default function Dashboard() {
           }
           to {
             opacity: 0;
-            transform: translate3d(24px, -4px, 0) scale(0.98);
+            transform: translate3d(8px, -4px, 0);
           }
         }
 
         .mac-notification-card {
-          animation: mac-notification-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+          animation: mac-notification-in 200ms ease-out both;
           -webkit-backdrop-filter: blur(28px) saturate(170%);
           backdrop-filter: blur(28px) saturate(170%);
         }
 
         .mac-notification-card[data-closing="true"] {
-          animation: mac-notification-out 260ms ease both;
+          animation: mac-notification-out 160ms ease both;
           pointer-events: none;
         }
 
@@ -1113,27 +1148,24 @@ export default function Dashboard() {
       >
         <header className="px-5 pt-8 sm:px-8 lg:px-10">
           <div className="mx-auto max-w-[1500px]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--ed-primary)]">
-              EduLITE
-            </p>
-            <p className="mt-1 text-xs font-semibold text-[var(--ed-muted)]">School year: {activeYearName}</p>
-            <h1 className="mt-2 text-4xl font-extrabold tracking-[-0.04em] text-[var(--ed-primary)] sm:text-5xl">
+            <h1 className="text-4xl font-extrabold tracking-[-0.04em] text-[var(--ed-primary)] sm:text-5xl">
               {pageDetails.title}
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ed-color-71808d)] sm:text-base">
               {pageDetails.description}
             </p>
+            <p className="mt-2 text-sm text-[var(--ed-muted)]">School year: {activeYearName}</p>
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1560px] px-5 pb-12 pt-7 sm:px-8 lg:px-10">
+        <main className={`mx-auto w-full pb-12 pt-7 ${activeView === "records" ? "max-w-none px-4 sm:px-6" : "max-w-[1560px] px-5 sm:px-8 lg:px-10"}`}>
           {loading ? (
             <div className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] px-8 py-16 text-center">
               <LoadingIndicator label="Loading EduLITE..." />
             </div>
           ) : (
             <Suspense fallback={<LoadingIndicator className="py-12" />}>
-              {activeView === "interventions" && <InterventionsView students={students} initialDraft={interventionDraft} />}
+            <div key={activeView} className="ed-view-enter">
               {activeView === "yearEnd" && (
                 <YearEndView onFinished={() => fetchDashboardData({ silent: true })} onOpenInsight={openSavedInsight} />
               )}
@@ -1207,6 +1239,7 @@ export default function Dashboard() {
 
               {activeView === "records" && (
                 <RecordsView
+                  key={recordsEditVersion}
                   students={students}
                   sections={sections}
                   subjects={subjects}
@@ -1234,6 +1267,14 @@ export default function Dashboard() {
                   getStudentAssessments={getStudentAssessments}
                   onEditStudent={handleEditStudent}
                   handleDeleteStudent={handleDeleteStudent}
+                  deletingStudentId={deletingStudentId}
+                  onAddStudent={() => { setStudentFormId(null); setStudentEditorOpen(true); }}
+                  studentEditorOpen={studentEditorOpen}
+                  studentFormId={studentFormId}
+                  onCancelStudentForm={handleStudentFormCancel}
+                  onSaveStudentForm={handleStudentFormSaved}
+                  onDeleteInsight={handleDeleteInsight}
+                  onFinishInsight={handleFinishInsight}
                   assessmentRecords={assessmentRecords}
                   gradeSummaries={gradeSummaries}
                   expandedStudentId={expandedStudentId}
@@ -1297,6 +1338,7 @@ export default function Dashboard() {
                   onSaved={handleAssessmentFormSaved}
                 />
               )}
+            </div>
             </Suspense>
           )}
         </main>
@@ -1307,10 +1349,7 @@ export default function Dashboard() {
           recommendation={aiRecommendation}
           error={aiRecommendationError}
           closeModal={closeAiRecommendation}
-          onAssignActivity={(activity) => {
-            setInterventionDraft({ studentId: aiRecommendation?.student?.id ?? "", title: activity.title, difficulty: activity.difficulty, activities: [...(activity.instructions ?? []), ...(activity.tasks ?? [])].join("\n"), notes: `Mastery check: ${activity.masteryCheck ?? ""}` });
-            closeAiRecommendation(); openView("interventions");
-          }}
+          onFinishInsight={handleFinishInsight}
         />
       )}
 
@@ -1489,9 +1528,6 @@ function DashboardView({
         <section className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-6 sm:p-7">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">
-                Performance
-              </p>
               <h2 className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)]">
                 Student Distribution
               </h2>
@@ -1504,11 +1540,12 @@ function DashboardView({
           <div className="mt-6 space-y-5">
             {distribution.map((item) => (
               <div key={item.label}>
-                <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                  <span className="font-medium text-[var(--ed-color-52616d)]">{item.label}</span>
-                  <span className="text-[var(--ed-color-8a98a5)]">
-                    {item.count} · {item.percentage.toFixed(0)}%
-                  </span>
+                <div className="mb-2 flex items-center gap-4">
+                  <p className="shrink-0 text-3xl font-extrabold tabular-nums text-[var(--ed-primary)]">{item.count}</p>
+                  <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-[var(--ed-color-52616d)]">{item.label}</h3>
+                  <p className="mt-1 text-xs text-[var(--ed-color-8a98a5)]">{item.percentage.toFixed(0)}% of assessed students</p>
+                  </div>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-[var(--ed-color-edf2f5)]">
                   <div
@@ -1524,9 +1561,6 @@ function DashboardView({
         <section className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-6 sm:p-7">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">
-                Priorities
-              </p>
               <h2 className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)]">
                 Learning Support
               </h2>
@@ -1564,9 +1598,6 @@ function DashboardView({
       <section className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-6 sm:p-7">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">
-              Recent Activity
-            </p>
             <h2 className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)]">
               Assessments
             </h2>
@@ -1637,19 +1668,20 @@ function DashboardView({
 }
 
 function MinimalMetric({ label, value, detail, attention = false }) {
+  const numeric = typeof value === "number" || /^\d/.test(String(value)) || value === "—";
   return (
-    <div className="rounded-[22px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-5 sm:p-6">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ed-color-8a98a5)]">
-        {label}
-      </p>
+    <div className={`${numeric ? "flex items-center gap-4 " : ""}rounded-[22px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-5 sm:p-6`}>
       <p
-        className={`mt-4 text-4xl font-extrabold tracking-[-0.04em] ${
+        className={`${numeric ? "shrink-0 text-4xl tabular-nums" : "break-words text-2xl"} font-extrabold tracking-[-0.04em] ${
           attention ? "text-[var(--ed-color-d94141)]" : "text-[var(--ed-primary)]"
         }`}
       >
         {value}
       </p>
+      <div className="min-w-0 flex-1 break-words">
+      <h3 className={`${numeric ? "" : "mt-3 "}text-base font-semibold text-[var(--ed-color-25313c)]`}>{label}</h3>
       <p className="mt-2 text-sm leading-5 text-[var(--ed-color-71808d)]">{detail}</p>
+      </div>
     </div>
   );
 }
@@ -1667,17 +1699,17 @@ function PriorityStudent({
 
   return (
     <div className="rounded-[18px] border border-[var(--ed-color-e7edf1)] bg-[var(--ed-color-f8fafb)] p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ed-color-8a98a5)]">
-        {label}
-      </p>
       {student ? (
-        <div className="mt-2 flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="truncate font-semibold text-[var(--ed-color-25313c)]">{student.name}</p>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <p className="shrink-0 text-3xl font-extrabold tabular-nums text-[var(--ed-primary)]">{student.averagePercentage.toFixed(1)}</p>
+            <div className="min-w-0">
+            <h3 className="truncate font-semibold text-[var(--ed-color-25313c)]">{student.name}</h3>
             <p className="mt-1 text-sm text-[var(--ed-color-71808d)]">
-              Term {term}: {student.averagePercentage.toFixed(1)}
+              {label} · Term {term}
               {student.isProvisional && " · In progress"}
             </p>
+            </div>
           </div>
           <button
             type="button"
@@ -1689,7 +1721,7 @@ function PriorityStudent({
           </button>
         </div>
       ) : (
-        <p className="mt-2 text-sm text-[var(--ed-color-8a98a5)]">No student identified.</p>
+        <div><h3 className="font-semibold">{label}</h3><p className="mt-2 text-sm text-[var(--ed-color-8a98a5)]">No student identified.</p></div>
       )}
     </div>
   );
@@ -1716,13 +1748,12 @@ function AssessmentsView({
     <div className="space-y-6">
       <section className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-6 sm:p-7">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">
-              Assessment Library
-            </p>
-            <h2 className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)]">
-              {displayedAssessments.length} assessment{displayedAssessments.length === 1 ? "" : "s"}
-            </h2>
+          <div className="flex min-w-0 items-center gap-4">
+            <p className="shrink-0 text-5xl font-extrabold tabular-nums text-[var(--ed-primary)]">{displayedAssessments.length}</p>
+            <div className="min-w-0">
+            <h2 className="text-2xl font-bold text-[var(--ed-color-25313c)]">Assessment Library</h2>
+            <p className="mt-2 text-sm text-[var(--ed-muted)]">Assessments for {currentSubjectLabel} in Term {selectedTerm}.</p>
+            </div>
           </div>
           <button
             type="button"
@@ -1794,9 +1825,6 @@ function AiInsightsView({
       />
 
       <section className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-6 sm:p-7">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">
-          Current Evidence Set
-        </p>
         <h2 className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)]">
           {currentSubjectLabel} · {currentSectionLabel} · {currentTermLabel}
         </h2>
@@ -1852,6 +1880,15 @@ export function RecordsView({
   saveStudentScores,
   getStudentAssessments,
   onEditStudent,
+  onAddStudent,
+  handleDeleteStudent,
+  deletingStudentId,
+  studentEditorOpen,
+  studentFormId,
+  onCancelStudentForm,
+  onSaveStudentForm,
+  onDeleteInsight,
+  onFinishInsight,
   assessmentRecords,
   gradeSummaries,
   expandedStudentId,
@@ -1866,7 +1903,8 @@ export function RecordsView({
   const [detailTab, setDetailTab] = useState("current");
   const [performanceLevel, setPerformanceLevel] = useState("ALL");
   const [studentSort, setStudentSort] = useState("name");
-  const filtersLocked = Boolean(editingStudentId) || savingScores;
+  const [studentFormBusy, setStudentFormBusy] = useState(false);
+  const filtersLocked = Boolean(editingStudentId) || savingScores || Boolean(deletingStudentId);
 
   const roster = useMemo(() => buildPerformanceRoster(studentAnalytics, {
     search: studentSearch, level: performanceLevel, sort: studentSort,
@@ -1968,87 +2006,50 @@ export function RecordsView({
   };
 
   return (
-    <div className="space-y-5">
-      <RecordPerformanceSummary
-        counts={roster.counts} total={roster.total} shown={filteredStudents.length}
-        level={performanceLevel} onLevelChange={setPerformanceLevel} disabled={filtersLocked}
-        context={`${currentSectionLabel} · ${currentSubjectLabel} · ${currentTermLabel}${studentSearch.trim() ? " · Search results" : ""}`}
-      />
-      <div className="grid min-h-[calc(100vh-350px)] grid-cols-1 gap-5 xl:grid-cols-[300px_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <aside aria-label="Performance sidebar" className="min-w-0 lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:overflow-y-auto minimal-scrollbar">
+        <RecordPerformanceSummary
+          counts={roster.counts} total={roster.total} shown={filteredStudents.length}
+          level={performanceLevel} onLevelChange={setPerformanceLevel} disabled={filtersLocked}
+          context={`${currentSectionLabel} · ${currentSubjectLabel} · ${currentTermLabel}${studentSearch.trim() ? " · Search results" : ""}`}
+        />
+      </aside>
+      <div className="grid min-h-[calc(100vh-350px)] min-w-0 grid-cols-1 items-start gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
       <aside className="xl:sticky xl:top-6 xl:self-start">
         <section className="overflow-hidden rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)]">
           <div className="border-b border-[var(--ed-color-eef2f5)] p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">
-              Learners
-            </p>
-            <h2 className="mt-2 text-xl font-bold text-[var(--ed-color-25313c)]">Student List</h2>
-            <p className="mt-1 text-xs text-[var(--ed-color-71808d)]">{filteredStudents.length} student{filteredStudents.length === 1 ? "" : "s"}{performanceLevel !== "ALL" ? ` · ${performanceLevel}` : ""}</p>
+            <div className="flex items-center gap-3">
+            <p className="shrink-0 text-4xl font-extrabold tabular-nums text-[var(--ed-primary)]">{filteredStudents.length}</p>
+            <div className="min-w-0">
+            <h2 className="text-xl font-bold text-[var(--ed-color-25313c)]">Student List</h2>
+            <p className="mt-1 text-xs text-[var(--ed-color-71808d)]">{currentSectionLabel} · {currentSubjectLabel}{performanceLevel !== "ALL" ? ` · ${performanceLevel}` : ""}</p>
+            </div>
+            </div>
 
-            <div className="mt-5 space-y-2.5">
-              <select
-                value={selectedSection}
-                aria-label="Filter records by section"
-                disabled={filtersLocked}
-                onChange={(event) => setSelectedSection(event.target.value)}
-                className="w-full rounded-[12px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-3 py-2.5 text-sm text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)]"
-              >
-                <option value="ALL">All Sections</option>
-                {sections.map((section) => (
-                  <option key={section.id} value={section.name}>{section.name}</option>
-                ))}
-              </select>
-              <select
-                value={selectedSubject}
-                aria-label="Filter records by subject"
-                disabled={filtersLocked}
-                onChange={(event) => setSelectedSubject(event.target.value)}
-                className="w-full rounded-[12px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-3 py-2.5 text-sm text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)]"
-              >
-                <option value="ALL">All Subjects</option>
-                {subjects.map((subject) => (
-                  <option key={subject.id} value={String(subject.id)}>{subject.name}</option>
-                ))}
-              </select>
-              <select
-                value={selectedTerm}
-                aria-label="Filter records by term"
-                disabled={filtersLocked}
-                onChange={(event) => setSelectedTerm(event.target.value)}
-                className="w-full rounded-[12px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-3 py-2.5 text-sm text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)]"
-              >
-                <option value="1">Term 1</option>
-                <option value="2">Term 2</option>
-                <option value="3">Term 3</option>
-              </select>
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-[var(--ed-color-52616d)]">Performance level</span>
-                <select aria-label="Filter records by performance" value={performanceLevel} disabled={filtersLocked}
-                  onChange={(event) => setPerformanceLevel(event.target.value)}
-                  className="w-full rounded-[12px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-3 py-2.5 text-sm text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)]">
-                  <option value="ALL">All levels ({roster.total})</option>
-                  {PERFORMANCE_LEVELS.map(({ label }) => <option key={label} value={label}>{label} ({roster.counts[label]})</option>)}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-[var(--ed-color-52616d)]">Sort students</span>
-                <select aria-label="Sort records students" value={studentSort} disabled={filtersLocked}
-                  onChange={(event) => setStudentSort(event.target.value)}
-                  className="w-full rounded-[12px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-3 py-2.5 text-sm text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)]">
-                  <option value="name">Name: A–Z</option>
-                  <option value="highest">Performance: highest first</option>
-                  <option value="lowest">Performance: lowest first</option>
-                </select>
-              </label>
-              <input
-                type="search"
-                aria-label="Search records students"
-                disabled={filtersLocked}
-                value={studentSearch}
-                onChange={(event) => setStudentSearch(event.target.value)}
-                placeholder="Search students"
-                className="w-full rounded-[12px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-3 py-2.5 text-sm text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)]"
-              />
-              {filtersLocked && <p className="text-xs text-[var(--ed-color-71808d)]">Save or cancel score edits to change filters.</p>}
+            <button type="button" disabled={filtersLocked} onClick={onAddStudent} className="mt-4 rounded-xl bg-[var(--ed-primary)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">Add student</button>
+
+            <div className="mt-4">
+              <FilterSidebar title="Filter & sort students" disabled={filtersLocked}
+                activeCount={[selectedSection !== "ALL", selectedSubject !== "ALL", selectedTerm !== "1", performanceLevel !== "ALL", studentSort !== "name", Boolean(studentSearch.trim())].filter(Boolean).length}
+                onReset={() => { setSelectedSection("ALL"); setSelectedSubject("ALL"); setSelectedTerm("1"); setPerformanceLevel("ALL"); setStudentSort("name"); setStudentSearch(""); }}>
+                <FilterSelect label="Section" ariaLabel="Filter records by section" value={selectedSection} disabled={filtersLocked} onChange={setSelectedSection}
+                  options={[{ value: "ALL", label: "All Sections" }, ...sections.map((section) => ({ value: section.name, label: section.name }))]} />
+                <FilterSelect label="Subject" ariaLabel="Filter records by subject" value={selectedSubject} disabled={filtersLocked} onChange={setSelectedSubject}
+                  options={[{ value: "ALL", label: "All Subjects" }, ...subjects.map((subject) => ({ value: String(subject.id), label: subject.name }))]} />
+                <FilterSelect label="Term" ariaLabel="Filter records by term" value={selectedTerm} disabled={filtersLocked} onChange={setSelectedTerm}
+                  options={[1, 2, 3].map((term) => ({ value: String(term), label: `Term ${term}` }))} />
+                <FilterSelect label="Performance level" ariaLabel="Filter records by performance" value={performanceLevel} disabled={filtersLocked} onChange={setPerformanceLevel}
+                  options={[{ value: "ALL", label: `All levels (${roster.total})` }, ...PERFORMANCE_LEVELS.map(({ label }) => ({ value: label, label: `${label} (${roster.counts[label]})` }))]} />
+                <FilterSelect label="Sort students" ariaLabel="Sort records students" value={studentSort} disabled={filtersLocked} onChange={setStudentSort}
+                  options={[{ value: "name", label: "Name: A?Z" }, { value: "highest", label: "Performance: highest first" }, { value: "lowest", label: "Performance: lowest first" }]} />
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-semibold text-[var(--ed-color-8a98a5)]">Search students</span>
+                  <input type="search" aria-label="Search records students" disabled={filtersLocked} value={studentSearch}
+                    onChange={(event) => setStudentSearch(event.target.value)} placeholder="Search students"
+                    className="w-full rounded-[12px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-3 py-2.5 text-sm text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)]" />
+                </label>
+              </FilterSidebar>
+              {filtersLocked && <p className="mt-2 text-xs text-[var(--ed-color-71808d)]">{deletingStudentId ? "Deleting student..." : "Save or cancel score edits to change filters."}</p>}
             </div>
           </div>
 
@@ -2062,7 +2063,7 @@ export function RecordsView({
                   type="button"
                   aria-label={`View assessment record for ${student.name}`}
                   aria-current={isSelected ? "true" : undefined}
-                  disabled={savingScores}
+                  disabled={savingScores || Boolean(deletingStudentId)}
                   onClick={() => handleSelectStudent(student)}
                   className={`w-full rounded-[16px] px-3.5 py-3.5 text-left ${
                     isSelected
@@ -2106,9 +2107,6 @@ export function RecordsView({
             <div className="border-b border-[var(--ed-color-eef2f5)] p-6 sm:p-8">
               <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">
-                    Selected Student
-                  </p>
                   <h2 className="mt-2 truncate text-4xl font-extrabold tracking-[-0.04em] text-[var(--ed-primary)] sm:text-5xl">
                     {selectedStudent.name}
                   </h2>
@@ -2150,9 +2148,13 @@ export function RecordsView({
                       <button
                         type="button"
                         onClick={() => onEditStudent(selectedStudent.id)}
+                        disabled={filtersLocked}
                         className="rounded-[12px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-2.5 text-sm font-semibold text-[var(--ed-color-52616d)] hover:border-[var(--ed-primary)] hover:text-[var(--ed-color-168cc8)]"
                       >
                         Edit info
+                      </button>
+                      <button type="button" disabled={filtersLocked} onClick={() => handleDeleteStudent(selectedStudent.id)} className="rounded-[12px] border border-[var(--ed-danger)] px-4 py-2.5 text-sm font-semibold text-[var(--ed-danger)] disabled:opacity-50">
+                        {deletingStudentId === selectedStudent.id ? "Deleting..." : "Delete student"}
                       </button>
                     </>
                   )}
@@ -2189,7 +2191,7 @@ export function RecordsView({
               </div>
             </div>
 
-            <div className="p-6 sm:p-8">
+            <div key={detailTab} className="ed-content-enter p-6 sm:p-8">
               {detailTab === "current" && (
                 <CurrentTermScores
                   student={selectedStudent}
@@ -2212,12 +2214,15 @@ export function RecordsView({
 
               {detailTab === "insights" && (
                 <SavedInsightsPanel
+                  key={selectedStudent.id}
                   student={selectedStudent}
                   insights={selectedInsights}
                   loading={selectedInsightsLoading}
                   error={selectedInsightError}
                   openSavedInsight={openSavedInsight}
                   reload={() => reloadStudentInsights(selectedStudent.id, true)}
+                  onDelete={(insight) => onDeleteInsight(selectedStudent.id, insight.id)}
+                  onFinish={onFinishInsight}
                 />
               )}
             </div>
@@ -2225,6 +2230,13 @@ export function RecordsView({
         )}
       </section>
       </div>
+      {studentEditorOpen && <ClassSidePanel title={studentFormId ? "Edit student" : "Add student"} busy={studentFormBusy} onClose={onCancelStudentForm}>
+        <Suspense fallback={<LoadingIndicator label="Loading student form..." />}>
+          <StudentForm key={studentFormId ?? "new"} compact embedded studentId={studentFormId}
+            initialSection={selectedSection === "ALL" ? "" : selectedSection} initialSubjectId={selectedSubject === "ALL" ? "" : selectedSubject}
+            onBusyChange={setStudentFormBusy} onCancel={onCancelStudentForm} onSaved={onSaveStudentForm} />
+        </Suspense>
+      </ClassSidePanel>}
     </div>
   );
 }
@@ -2257,7 +2269,6 @@ function CurrentTermScores({
   return (
     <div>
       <SectionTitle
-        eyebrow="Assessment Scores"
         title="Current Term"
         description="Scores for assessments that match the current subject and term filters."
       />
@@ -2347,7 +2358,6 @@ function OfficialGradesTable({ gradeSummaries }) {
   return (
     <div>
       <SectionTitle
-        eyebrow="Official Grades"
         title="Three-Term Summary"
         description="Assessment grades are transmuted per term. Imported term grades are already final grades. The final subject grade averages all three terms."
       />
@@ -2403,7 +2413,6 @@ function AssessmentHistoryTable({ records }) {
   return (
     <div>
       <SectionTitle
-        eyebrow="Assessment History"
         title="Complete Record"
         description="All created assessments for the selected learner across subjects and terms."
       />
@@ -2457,23 +2466,34 @@ function AssessmentHistoryTable({ records }) {
   );
 }
 
-function SavedInsightsPanel({ student, insights, loading, error, openSavedInsight, reload }) {
+function SavedInsightsPanel({ student, insights, loading, error, openSavedInsight, reload, onDelete, onFinish }) {
+  const [deletingId, setDeletingId] = useState(null);
+  const [deleteError, setDeleteError] = useState("");
+  const remove = async (insight) => {
+    if (deletingId || !window.confirm(`Delete "${insight.title || "Saved Recommendation"}" and its PDF?`)) return;
+    setDeletingId(insight.id); setDeleteError("");
+    try { await onDelete(insight); }
+    catch (err) { setDeleteError(err.response?.data?.message || "Unable to delete the saved recommendation."); }
+    finally { setDeletingId(null); }
+  };
   return (
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <SectionTitle
-          eyebrow="AI Insights"
           title="Saved Recommendations"
           description={`Intervention and enrichment recommendations saved for ${student.name}.`}
         />
         <button
           type="button"
           onClick={reload}
+          disabled={loading || Boolean(deletingId)}
           className="rounded-[11px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-2.5 text-sm font-semibold text-[var(--ed-color-52616d)] hover:border-[var(--ed-primary)] hover:text-[var(--ed-color-168cc8)]"
         >
           Refresh
         </button>
       </div>
+
+      {deleteError && <p role="alert" className="mt-4 text-sm text-[var(--ed-danger)]">{deleteError}</p>}
 
       {loading ? (
         <LoadingIndicator label="Loading insights..." className="mt-6 rounded-[16px] bg-[var(--ed-color-f8fafb)] p-8" />
@@ -2484,19 +2504,20 @@ function SavedInsightsPanel({ student, insights, loading, error, openSavedInsigh
       ) : (
         <div className="mt-6 grid gap-3 md:grid-cols-2">
           {insights.map((insight) => (
+            <article key={insight.id} className="rounded-[18px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-5">
             <button
-              key={insight.id}
               type="button"
               onClick={() => openSavedInsight(insight)}
-              className="rounded-[18px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-5 text-left hover:border-[var(--ed-color-b8ddec)] hover:bg-[var(--ed-color-fbfdff)]"
+              className="w-full text-left hover:text-[var(--ed-primary)]"
             >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ed-primary)]">
-                {insight.supportType === "intervention" ? "Intervention" : "Enrichment"}
-              </p>
               <h4 className="mt-2 text-lg font-bold text-[var(--ed-color-25313c)]">{insight.title || "Saved Recommendation"}</h4>
+              <p className="mt-2 text-sm font-medium text-[var(--ed-accent-text)]">{insight.supportType === "intervention" ? "Intervention" : "Enrichment"}</p>
               <p className="mt-2 text-sm text-[var(--ed-color-71808d)]">{insight.focusLabel || "General learning support"}</p>
               <p className="mt-4 text-xs text-[var(--ed-color-a0abb4)]">{formatSavedDate(insight.createdAt)}</p>
             </button>
+            <div className="mt-4"><InsightCompletionControl insight={insight} onFinish={onFinish} /></div>
+            <button type="button" aria-label={`Delete recommendation ${insight.title || "Saved Recommendation"}`} disabled={Boolean(deletingId)} onClick={() => remove(insight)} className="mt-4 text-sm font-semibold text-[var(--ed-danger)] disabled:opacity-50">{deletingId === insight.id ? "Deleting..." : "Delete recommendation"}</button>
+            </article>
           ))}
         </div>
       )}
@@ -2515,8 +2536,10 @@ function DashboardFilters({
   setSelectedTerm,
 }) {
   return (
-    <section className="rounded-[20px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-4 sm:p-5">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+    <div className="flex justify-end">
+      <FilterSidebar title="Filter results"
+        activeCount={[selectedSection !== "ALL", selectedSubject !== "ALL", selectedTerm !== "1"].filter(Boolean).length}
+        onReset={() => { setSelectedSection("ALL"); setSelectedSubject("ALL"); setSelectedTerm("1"); }}>
         <FilterSelect
           label="Section"
           value={selectedSection}
@@ -2545,16 +2568,18 @@ function DashboardFilters({
             { value: "3", label: "Term 3" },
           ]}
         />
-      </div>
-    </section>
+      </FilterSidebar>
+    </div>
   );
 }
 
-function FilterSelect({ label, value, onChange, options }) {
+function FilterSelect({ label, ariaLabel, value, onChange, options, disabled = false }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ed-color-8a98a5)]">{label}</span>
+      <span className="mb-1.5 block text-sm font-semibold text-[var(--ed-color-8a98a5)]">{label}</span>
       <select
+        aria-label={ariaLabel}
+        disabled={disabled}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="w-full rounded-[12px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-3 py-2.5 text-sm text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)]"
@@ -2577,7 +2602,6 @@ function AssessmentList({
   return (
     <section className="overflow-hidden rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)]">
       <div className="border-b border-[var(--ed-color-eef2f5)] p-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">Assessments</p>
         <h2 className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)]">{currentSubjectLabel}</h2>
       </div>
       <div className="minimal-scrollbar overflow-x-auto">
@@ -2668,10 +2692,12 @@ function InsightList({
 
   return (
     <section className="overflow-hidden rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)]">
-      <div className="border-b border-[var(--ed-color-eef2f5)] p-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">Learning Support</p>
-        <h2 className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)]">{title}</h2>
+      <div className="flex items-center gap-4 border-b border-[var(--ed-color-eef2f5)] p-6">
+        <p className="shrink-0 text-4xl font-extrabold tabular-nums text-[var(--ed-primary)]">{students.length}</p>
+        <div className="min-w-0">
+        <h2 className="text-2xl font-bold text-[var(--ed-color-25313c)]">{title}</h2>
         {description && <p className="mt-2 text-sm text-[var(--ed-color-71808d)]">{description}</p>}
+        </div>
       </div>
       <div className="divide-y divide-[var(--ed-color-eef2f5)]">
         {students.map((student) => {
@@ -2702,7 +2728,7 @@ function InsightList({
   );
 }
 
-function AiRecommendationModal({ recommendation, error, closeModal, onAssignActivity }) {
+function AiRecommendationModal({ recommendation, error, closeModal, onFinishInsight }) {
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const downloadPdf = async () => {
@@ -2717,11 +2743,10 @@ function AiRecommendationModal({ recommendation, error, closeModal, onAssignActi
   const plan = recommendation?.plan;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#25313C]/40 p-4 backdrop-blur-[4px]">
-      <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-[26px] bg-[var(--ed-surface)] shadow-[0_24px_80px_rgba(37,49,60,0.28)]">
+    <div className="ed-backdrop-enter fixed inset-0 z-[100] flex items-center justify-center bg-[#25313C]/40 p-4 backdrop-blur-[4px]">
+      <div className="ed-dialog-enter max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-[26px] bg-[var(--ed-surface)] shadow-[0_24px_80px_rgba(37,49,60,0.28)]">
         <div className="flex items-start justify-between gap-4 border-b border-[var(--ed-color-eef2f5)] p-6">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">Gemini Learning Support</p>
             <h2 className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)]">{plan?.title || "Learning-Support Recommendation"}</h2>
             {recommendation?.student && (
               <p className="mt-2 text-sm text-[var(--ed-color-71808d)]">
@@ -2747,6 +2772,7 @@ function AiRecommendationModal({ recommendation, error, closeModal, onAssignActi
             <div className="rounded-[18px] bg-[var(--ed-color-fff1f1)] p-5 text-sm text-[var(--ed-color-c53939)]">{error}</div>
           ) : (
             <div className="space-y-8">
+              {recommendation?.savedInsight && <InsightCompletionControl key={recommendation.savedInsight.id} insight={recommendation.savedInsight} onFinish={onFinishInsight} />}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <MinimalInfo label="Classification" value={recommendation?.classification || "—"} />
                 <MinimalInfo label={recommendation?.analytics?.isProvisional ? "Focus Average · In progress" : "Focus Average"} value={formatPercentage(recommendation?.analytics?.focusAveragePercentage)} />
@@ -2796,8 +2822,7 @@ function AiRecommendationModal({ recommendation, error, closeModal, onAssignActi
                           <div className="mt-5 space-y-4">
                             {item.practiceActivities.map((activity) => (
                               <div key={activity.difficulty} className="rounded-[16px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-color-f8fafb)] p-4">
-                                <p className="text-xs font-bold uppercase text-[var(--ed-color-168cc8)]">{activity.difficulty} practice · {activity.duration}</p>
-                                {onAssignActivity && <button type="button" onClick={() => onAssignActivity(activity)} className="mt-2 text-xs font-semibold text-[var(--ed-accent-text)] underline">Use in intervention tracker</button>}
+                                <p className="text-sm font-bold text-[var(--ed-color-168cc8)]">{activity.difficulty} practice · {activity.duration}</p>
                                 <h5 className="mt-2 font-bold text-[var(--ed-color-25313c)]">{activity.title}</h5>
                                 <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--ed-color-52616d)]">{activity.objective}</p>
                                 <p className="mt-2 text-sm text-[var(--ed-color-71808d)]">Materials: {activity.materials?.join(", ")}</p>
@@ -2887,10 +2912,12 @@ function AiRecommendationModal({ recommendation, error, closeModal, onAssignActi
 }
 
 function MinimalInfo({ label, value }) {
+  const numeric = /^\d/.test(String(value)) || value === "—";
   return (
-    <div className="rounded-[16px] bg-[var(--ed-color-f4f7fa)] p-4">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ed-color-8a98a5)]">{label}</p>
-      <p className="mt-2 font-bold text-[var(--ed-color-25313c)]">{value}</p>
+    <div className={`${numeric ? "flex items-center gap-3 " : ""}rounded-[16px] bg-[var(--ed-color-f4f7fa)] p-4`}>
+      {numeric && <p className="shrink-0 text-3xl font-extrabold tabular-nums text-[var(--ed-primary)]">{value}</p>}
+      <h4 className="min-w-0 text-sm font-semibold text-[var(--ed-color-52616d)]">{label}</h4>
+      {!numeric && <p className="mt-2 font-bold text-[var(--ed-color-25313c)]">{value}</p>}
     </div>
   );
 }
@@ -2907,8 +2934,8 @@ function RecommendationSection({ title, children }) {
 function RecommendationCard({ index, title, description, children }) {
   return (
     <div className="rounded-[18px] border border-[var(--ed-color-e3e9ee)] p-5">
-      <div className="flex items-start gap-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--ed-primary)] text-sm font-bold text-white">{index}</span>
+      <div className="flex items-start gap-4">
+        <span className="shrink-0 text-4xl font-extrabold tabular-nums text-[var(--ed-primary)]">{index}</span>
         <div className="min-w-0">
           <h4 className="font-bold text-[var(--ed-color-25313c)]">{title}</h4>
           {description && <p className="mt-2 text-sm leading-6 text-[var(--ed-color-52616d)]">{description}</p>}
@@ -2922,17 +2949,16 @@ function RecommendationCard({ index, title, description, children }) {
 function PlanDetail({ label, value }) {
   return (
     <div className="rounded-[14px] bg-[var(--ed-color-f8fafb)] p-3.5">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--ed-color-8a98a5)]">{label}</p>
+      <h4 className="text-sm font-semibold text-[var(--ed-color-52616d)]">{label}</h4>
       <p className="mt-1.5 text-sm leading-5 text-[var(--ed-color-52616d)]">{value || "—"}</p>
     </div>
   );
 }
 
-function SectionTitle({ eyebrow, title, description }) {
+function SectionTitle({ title, description }) {
   return (
     <div>
-      {eyebrow && <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">{eyebrow}</p>}
-      <h2 className="mt-2 text-2xl font-bold tracking-[-0.02em] text-[var(--ed-color-25313c)]">{title}</h2>
+      <h2 className="text-2xl font-bold tracking-[-0.02em] text-[var(--ed-color-25313c)]">{title}</h2>
       {description && <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ed-color-71808d)]">{description}</p>}
     </div>
   );
@@ -2971,7 +2997,7 @@ function TableHeading({ children, align = "left" }) {
   return (
     <th
       scope="col"
-      className={`px-5 py-3.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ed-color-8a98a5)] ${
+      className={`px-5 py-3.5 text-sm font-semibold text-[var(--ed-color-8a98a5)] ${
         align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"
       }`}
     >

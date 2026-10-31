@@ -48,14 +48,15 @@ test("phone dock exposes three shortcuts and an accessible full navigation list"
   const destinations = [
     ["Dashboard", "dashboard"], ["Manage your class", "manageClass"],
     ["Assessments", "assessments"], ["Records", "records"],
-    ["Interventions", "interventions"], ["Year-End & Archives", "yearEnd"],
+    ["Year-End & Archives", "yearEnd"],
     ["Awards", "awards"], ["AI Insights", "aiInsights"], ["Settings", "settings"],
   ];
   for (const [label, view] of destinations) {
     await click(toggle());
     assert.equal(toggle().getAttribute("aria-expanded"), "true");
     assert.ok(document.getElementById(toggle().getAttribute("aria-controls")));
-    assert.equal(menu().querySelectorAll("button").length, 10);
+    assert.equal(menu().querySelectorAll("button").length, 9);
+    assert.ok(!menu().textContent.includes("Interventions"));
     const item = [...menu().querySelectorAll("button")].find((button) => button.textContent === label);
     assert.ok(item, `${label} is reachable from View all`);
     await click(item);

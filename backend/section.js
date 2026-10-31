@@ -50,10 +50,7 @@ function formatSection(
 // GET ALL SECTIONS
 // ===========================
 
-router.get(
-  "/sections",
-  requireAuth,
-  async (req, res) => {
+export async function listSections(req, res) {
     try {
       const ownerId =
         req.user.id;
@@ -67,27 +64,13 @@ router.get(
           })
           .lean();
 
-      const results =
-        await Promise.all(
-          sections.map(
-            async (section) => {
-              const studentCount =
-                await Student.countDocuments(
-                  {
-                    ownerId,
-
-                    sectionId:
-                      section._id,
-                  },
-                );
-
-              return formatSection(
-                section,
-                studentCount,
-              );
-            },
-          ),
-        );
+      const studentRows = sections.length ? await Student.find({ ownerId, sectionId: { $in: sections.map((section) => section._id) } }).select("sectionId").lean() : [];
+      const counts = new Map();
+      for (const student of studentRows) {
+        const key = String(student.sectionId);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+      const results = sections.map((section) => formatSection(section, counts.get(String(section._id)) ?? 0));
 
       return res.json(results);
     } catch (error) {
@@ -101,8 +84,9 @@ router.get(
           "Unable to load sections.",
       });
     }
-  },
-);
+}
+
+router.get("/sections", requireAuth, listSections);
 
 // ===========================
 // ADD A SECTION

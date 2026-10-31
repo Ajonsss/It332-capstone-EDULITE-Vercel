@@ -18,8 +18,7 @@ export default function SettingsView({ onReplayTutorial, teacherTools = false })
     <div className="max-w-4xl space-y-6">
       {teacherTools && <TeacherSettings />}
       <section className="rounded-[22px] border border-[var(--ed-border)] bg-[var(--ed-surface)] p-6 sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-widest text-[var(--ed-accent-text)]">Personalize your workspace</p>
-        <h2 className="mt-2 text-xl font-bold text-[var(--ed-text)]">Appearance</h2>
+        <h2 className="text-xl font-bold text-[var(--ed-text)]">Appearance</h2>
         <p className="mt-2 text-sm leading-6 text-[var(--ed-muted)]">Choose your theme. Changes apply immediately and are remembered in this browser.</p>
         <fieldset className="mt-6">
           <legend className="sr-only">Color theme</legend>

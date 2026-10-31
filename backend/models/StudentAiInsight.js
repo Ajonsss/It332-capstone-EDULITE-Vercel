@@ -116,6 +116,9 @@ const studentAiInsightSchema =
         trim: true,
       },
 
+      status: { type: String, enum: ["active", "completed"], default: "active" },
+      completedAt: { type: Date, default: null },
+
       result: {
         type:
           mongoose.Schema.Types

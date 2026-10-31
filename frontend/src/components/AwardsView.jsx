@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { createPortal } from "react-dom";
 import { AWARD_TYPES, buildAwardCandidates } from "../utils/awards";
+import FilterSidebar from "./FilterSidebar";
 
 const fieldClass = "mt-2 w-full rounded-xl border border-[var(--ed-border)] bg-[var(--ed-surface)] px-3 py-2.5 text-[var(--ed-text)]";
 const today = () => { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; };
@@ -61,12 +62,18 @@ export default function AwardsView({ students, sections, subjects, gradeSummarie
       {error && <p role="alert" className="rounded-xl bg-[var(--ed-danger-soft)] p-4 text-[var(--ed-danger)]">{error}</p>}
       <form onSubmit={generate} className="space-y-6">
         <section className="rounded-[22px] border border-[var(--ed-border)] bg-[var(--ed-surface)] p-6">
-          <h2 className="text-xl font-bold">Award criteria</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-bold">Award criteria</h2>
+            <FilterSidebar title="Filter award candidates"
+              activeCount={[section !== "ALL", subjectId !== "ALL", term !== "1"].filter(Boolean).length}
+              onReset={() => { setSection("ALL"); setSubjectId("ALL"); setTerm("1"); setSelected([]); }}>
+              <label className="block text-sm font-semibold">Section<select aria-label="Award section" className={fieldClass} value={section} onChange={(event) => changeScope(setSection, event.target.value)}><option value="ALL">All sections</option>{sections.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
+              <label className="block text-sm font-semibold">Subject<select aria-label="Award subject" className={fieldClass} value={subjectId} onChange={(event) => changeScope(setSubjectId, event.target.value)}><option value="ALL">All Subjects</option>{subjects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+              <label className="block text-sm font-semibold">Term<select aria-label="Award term" className={fieldClass} value={term} onChange={(event) => changeScope(setTerm, event.target.value)}>{[1, 2, 3].map((item) => <option key={item} value={item}>Term {item}</option>)}</select></label>
+            </FilterSidebar>
+          </div>
           <p className="mt-2 text-sm leading-6 text-[var(--ed-muted)]">Use official term grades to suggest recipients. These are teacher-defined awards; review your school's criteria before issuing certificates. All Subjects requires complete grades in every enrolled subject.</p>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="text-sm font-semibold">Section<select aria-label="Award section" className={fieldClass} value={section} onChange={(event) => changeScope(setSection, event.target.value)}><option value="ALL">All sections</option>{sections.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
-            <label className="text-sm font-semibold">Subject<select aria-label="Award subject" className={fieldClass} value={subjectId} onChange={(event) => changeScope(setSubjectId, event.target.value)}><option value="ALL">All Subjects</option>{subjects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-            <label className="text-sm font-semibold">Term<select aria-label="Award term" className={fieldClass} value={term} onChange={(event) => changeScope(setTerm, event.target.value)}>{[1, 2, 3].map((item) => <option key={item} value={item}>Term {item}</option>)}</select></label>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-semibold">Award<select aria-label="Award type" className={fieldClass} value={awardType} onChange={(event) => {
               const option = AWARD_TYPES.find((item) => item.value === event.target.value);
               setAwardType(option.value); setMinimum(String(option.minimum)); setTitle(option.label); setSelected([]);
@@ -120,7 +127,6 @@ function Certificate({ certificate }) {
   return <article className={`award-certificate${compact ? " certificate-compact" : ""}`}>
     <div className="certificate-school">{certificate.school}</div>
     <div className="certificate-rule" />
-    <p className="certificate-eyebrow">Certificate of Achievement</p>
     <h2>{certificate.title}</h2>
     <p className="certificate-presented">Presented to</p>
     <h3>{certificate.studentName}</h3>

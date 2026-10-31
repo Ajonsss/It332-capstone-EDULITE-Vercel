@@ -8,9 +8,10 @@ import {
 import { useTheme } from "./utils/theme";
 import { lazy, Suspense } from "react";
 import LoadingIndicator from "./components/LoadingIndicator";
+import { loadDashboard } from "./utils/loadDashboard.js";
 
 const Login = lazy(() => import("./components/Login"));
-const Dashboard = lazy(() => import("./components/Dashboard"));
+const Dashboard = lazy(loadDashboard);
 const StudentForm = lazy(() => import("./components/StudentForm"));
 const AssessmentForm = lazy(() => import("./components/AssessmentForm"));
 

@@ -11,6 +11,13 @@ import { createClassStructureRouter } from "./classStructure.js";
 import { assessmentOverlapFilter } from "../shared/assessmentScope.mjs";
 
 const formatClass = (item) => ({ id: String(item._id), grade: item.grade, section_id: item.sectionId ? String(item.sectionId) : null, subject_ids: item.subjectIds.map(String) });
+export const createListClassesHandler = (Classes = ClassOffering) => async (req, res) => {
+  try {
+    const items = await Classes.find({ ownerId: req.user.id, schoolYearId: req.academicYear ?? null }).sort({ grade: 1, createdAt: 1 }).lean();
+    return res.json(items.map(formatClass));
+  } catch (error) { console.error("GET /classes failed:", error); return res.status(500).json({ message: "Unable to load registered classes." }); }
+};
+export const listClasses = createListClassesHandler();
 const normalize = (value) => value.trim().replace(/\s+/g, " ");
 
 function validateClassFields(body, keys) {
@@ -51,12 +58,7 @@ const failUpdate = (status, message) => { const error = new Error(message); erro
 export function createClassManagementRouter({ auth = requireAuth, Classes = ClassOffering, Sections = Section, Subjects = Subject, Students = Student, Assessments = Assessment,
   transaction = (work) => mongoose.connection.transaction(work) } = {}) {
   const router = express.Router();
-  router.get("/classes", auth, async (req, res) => {
-    try {
-      const items = await Classes.find({ ownerId: req.user.id, schoolYearId: req.academicYear ?? null }).sort({ grade: 1, createdAt: 1 }).lean();
-      res.json(items.map(formatClass));
-    } catch (error) { console.error("GET /classes failed:", error); res.status(500).json({ message: "Unable to load registered classes." }); }
-  });
+  router.get("/classes", auth, createListClassesHandler(Classes));
   router.post("/classes", auth, async (req, res) => {
     const message = validateClassPayload(req.body);
     if (message) return res.status(400).json({ message });

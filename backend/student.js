@@ -222,10 +222,7 @@ async function validateStudent(
   };
 }
 
-router.get(
-  "/students",
-  requireAuth,
-  async (req, res) => {
+export async function listStudents(req, res) {
     try {
       const ownerId = req.user.id;
       const filter = { ownerId };
@@ -299,8 +296,9 @@ router.get(
           "Unable to load students.",
       });
     }
-  },
-);
+}
+
+router.get("/students", requireAuth, listStudents);
 
 router.get(
   "/students/:id",

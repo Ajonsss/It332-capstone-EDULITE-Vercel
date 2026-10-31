@@ -293,12 +293,9 @@ export default function StudentForm({
       className="overflow-hidden rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)]"
     >
       <div className={`border-b border-[var(--ed-color-eef2f5)] ${compact ? "p-4" : "px-6 py-6 sm:px-8 sm:py-7"}`}>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">
-          Student Details
-        </p>
         <h2
           id="student-form-title"
-          className={`mt-2 ${compact ? "text-xl" : "text-3xl"} font-extrabold tracking-[-0.03em] text-[var(--ed-primary)]`}
+          className={`${compact ? "text-xl" : "text-3xl"} font-extrabold tracking-[-0.03em] text-[var(--ed-primary)]`}
         >
           {isEditing ? "Edit Student" : "Register Student"}
         </h2>

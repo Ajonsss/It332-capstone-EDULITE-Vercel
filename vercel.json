@@ -4,7 +4,10 @@
     "backend": {
       "root": "backend",
       "framework": "express",
-      "entrypoint": "app.js"
+      "entrypoint": "app.js",
+      "functions": {
+        "app.js": { "regions": ["sin1"] }
+      }
     },
     "frontend": {
       "root": "frontend",

@@ -20,8 +20,9 @@ test("assessment form prompts for sections and limits score entry to selected gr
   const classes = [{ grade: 9, section_id: "lily", subject_ids: ["math"] }];
   const assessment = { name: "Fractions", budget_of_work: "Adding fractions", term: 1, category: "written_work", sequence: 1, date: "2026-10-23", total_items: 10, subject_id: "math", class_sections: [{ grade: 7, section_id: "rose" }], students: [{ ...students[0], score: 8 }] };
   const writes = [], saved = [];
+  const registeredAssessments = [];
   t.mock.method(axios, "get", async (url) => {
-    const data = { "/api/subjects": subjects, "/api/sections": sections, "/api/students": students, "/api/classes": classes,
+    const data = { "/api/subjects": subjects, "/api/sections": sections, "/api/students": students, "/api/classes": classes, "/api/assessments": registeredAssessments,
       "/api/grading-rules": { writtenWorkWeight: 20, performanceTaskWeight: 50, examinationWeight: 30 },
       "/api/assessments/existing": assessment,
       "/api/assessments/legacy": { ...assessment, class_sections: null },
@@ -33,8 +34,9 @@ test("assessment form prompts for sections and limits score entry to selected gr
   const { default: AssessmentForm } = await vite.ssrLoadModule("/src/components/AssessmentForm.jsx");
   const root = createRoot(document.getElementById("root"));
   t.after(async () => { await React.act(() => root.unmount()); await vite.close(); dom.window.close(); });
+  let version = 0;
   const render = async (assessmentId = null) => {
-    await React.act(async () => root.render(React.createElement(MemoryRouter, null, React.createElement(AssessmentForm, { key: assessmentId ?? "new", assessmentId, embedded: true, onSaved: (data) => saved.push(data) }))));
+    await React.act(async () => root.render(React.createElement(MemoryRouter, null, React.createElement(AssessmentForm, { key: ++version, assessmentId, embedded: true, onSaved: (data) => saved.push(data) }))));
     for (let count = 0; count < 100 && !document.querySelector("#assessment-name"); count++) await React.act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
     assert.ok(document.querySelector("#assessment-name"));
   };
@@ -100,5 +102,63 @@ test("assessment form prompts for sections and limits score entry to selected gr
     await click(button("Update Assessment"));
     assert.deepEqual(writes.at(-1).body.class_sections, [{ grade: 8, section_id: "rose" }]);
     assert.deepEqual(writes.at(-1).body.scores, [{ student_id: "older", score: null }]);
+  });
+  const slotValues = () => [...document.querySelector("#assessment-sequence").options].map((item) => item.value).filter(Boolean);
+  const registered = (id, category, sequence, scope = [{ grade: 7, section_id: "rose" }], term = 1, subject = "math") =>
+    ({ ...assessment, id, category, sequence, class_sections: scope, term, subject_id: subject });
+  await t.test("each component hides occupied slots and saves the automatically selected next free position", async () => {
+    registeredAssessments.push(registered("existing", "written_work", 1), registered("pt1", "performance_task", 1),
+      registered("st1", "summative_test", 1), registered("exam", "term_exam", 1));
+    await render();
+    assert.equal(document.querySelector("#assessment-sequence").disabled, true);
+    await click(group(7, "Rose"));
+    assert.deepEqual(slotValues(), ["2", "3", "4", "5"]);
+    assert.equal(document.querySelector("#assessment-sequence").value, "2");
+    await change("#assessment-name", "Fractions practice"); await change("#assessment-budget-of-work", "Adding fractions"); await change("#assessment-total-items", "10");
+    await click(button("Save Assessment")); assert.equal(writes.at(-1).body.sequence, 2);
+    await change("#assessment-category", "performance_task"); assert.deepEqual(slotValues(), ["2", "3"]);
+    assert.equal(document.querySelector("#assessment-sequence").value, "2");
+    await change("#assessment-category", "summative_test"); assert.deepEqual(slotValues(), ["2"]);
+    await change("#assessment-category", "term_exam"); assert.deepEqual(slotValues(), []);
+    assert.equal(document.querySelector("#assessment-sequence").disabled, true);
+    assert.equal(button("Save Assessment").disabled, true);
+    assert.match(document.querySelector("#assessment-slot-help").textContent, /All Term Examination slots are already used/);
+    await change("#assessment-term", "2"); assert.deepEqual(slotValues(), ["1"]);
+    assert.equal(button("Save Assessment").disabled, false);
+  });
+  await t.test("slot availability follows subjects, terms, grades and all selected sections", async () => {
+    registeredAssessments.push(registered("lily2", "written_work", 2, [{ grade: 7, section_id: "lily" }]),
+      registered("older4", "written_work", 4, [{ grade: 8, section_id: "rose" }]),
+      registered("term2", "written_work", 2, [{ grade: 7, section_id: "rose" }], 2),
+      registered("science3", "written_work", 3, [{ grade: 7, section_id: "lily" }], 1, "science"));
+    await render(); await click(group(7, "Rose")); await click(group(7, "Lily"));
+    assert.deepEqual(slotValues(), ["3", "4", "5"], "the slot must be free in every selected section");
+    await click(group(8, "Rose")); assert.deepEqual(slotValues(), ["3", "5"]);
+    await click(button("Clear sections")); await click(group(8, "Rose"));
+    assert.deepEqual(slotValues(), ["1", "2", "3", "5"], "the same section name in another grade has its own slots");
+    await change("#assessment-term", "2"); assert.deepEqual(slotValues(), ["1", "2", "3", "4", "5"]);
+    await click(group(8, "Rose")); await click(group(7, "Rose")); assert.deepEqual(slotValues(), ["1", "3", "4", "5"]);
+    await change("#assessment-subject", "science"); assert.deepEqual(slotValues(), []);
+    await click(group(7, "Lily")); await change("#assessment-term", "1");
+    assert.deepEqual(slotValues(), ["1", "2", "4", "5"]);
+  });
+  await t.test("editing keeps its own slot available while still excluding other assessments", async () => {
+    registeredAssessments.push(registered("rose2", "written_work", 2));
+    await render("existing");
+    assert.deepEqual(slotValues(), ["1", "3", "4", "5"]);
+    assert.equal(document.querySelector("#assessment-sequence").value, "1");
+    await click(button("Update Assessment")); assert.equal(writes.at(-1).body.sequence, 1);
+    await click(group(7, "Lily")); assert.deepEqual(slotValues(), ["1", "3", "4", "5"]);
+    await change("#assessment-category", "performance_task"); assert.deepEqual(slotValues(), ["2", "3"]);
+  });
+  await t.test("subject-wide assessments block occupied slots in all sections and full components cannot be submitted", async () => {
+    registeredAssessments.splice(0, registeredAssessments.length, ...[1, 2, 3, 4, 5].map((sequence) => registered(`wide${sequence}`, "written_work", sequence, null)));
+    await render(); await click(group(9, "Lily"));
+    assert.deepEqual(slotValues(), []); assert.equal(button("Save Assessment").disabled, true);
+    assert.match(document.querySelector("#assessment-slot-help").textContent, /All Written \/ Oral Works slots are already used/);
+    await change("#assessment-name", "No free slot"); await change("#assessment-budget-of-work", "Adding fractions"); await change("#assessment-total-items", "10");
+    const before = writes.length;
+    await React.act(async () => document.querySelector("form").dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })));
+    assert.equal(writes.length, before); assert.match(document.querySelector('[role="alert"]').textContent, /Select a valid ECR assessment slot/);
   });
 });

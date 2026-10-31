@@ -73,10 +73,7 @@ async function getCounts(
   };
 }
 
-router.get(
-  "/subjects",
-  requireAuth,
-  async (req, res) => {
+export async function listSubjects(req, res) {
     try {
       const ownerId = req.user.id;
 
@@ -87,30 +84,19 @@ router.get(
           .sort({ nameKey: 1 })
           .lean();
 
-      const results =
-        await Promise.all(
-          subjects.map(
-            async (subject) => {
-              const {
-                studentCount,
-                assessmentCount,
-              } = await getCounts(
-                subject._id,
-                ownerId,
-              );
-
-              return {
-                id:
-                  subject._id.toString(),
-                name: subject.name,
-                student_count:
-                  studentCount,
-                assessment_count:
-                  assessmentCount,
-              };
-            },
-          ),
-        );
+      const ids = subjects.map((subject) => subject._id);
+      const [studentRows, assessmentRows] = ids.length ? await Promise.all([
+        Student.find({ ownerId, subjectIds: { $in: ids } }).select("subjectIds").lean(),
+        Assessment.find({ ownerId, subjectId: { $in: ids } }).select("subjectId").lean(),
+      ]) : [[], []];
+      const studentCounts = new Map(), assessmentCounts = new Map();
+      for (const student of studentRows) for (const key of new Set((student.subjectIds ?? []).map(String))) studentCounts.set(key, (studentCounts.get(key) ?? 0) + 1);
+      for (const assessment of assessmentRows) {
+        const key = String(assessment.subjectId);
+        assessmentCounts.set(key, (assessmentCounts.get(key) ?? 0) + 1);
+      }
+      const results = subjects.map((subject) => ({ id: String(subject._id), name: subject.name,
+        student_count: studentCounts.get(String(subject._id)) ?? 0, assessment_count: assessmentCounts.get(String(subject._id)) ?? 0 }));
 
       return res.json(results);
     } catch (error) {
@@ -124,8 +110,9 @@ router.get(
           "Unable to load subjects.",
       });
     }
-  },
-);
+}
+
+router.get("/subjects", requireAuth, listSubjects);
 
 router.get(
   "/subjects/:id",

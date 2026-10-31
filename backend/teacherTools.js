@@ -30,10 +30,11 @@ export function validateRules(input) {
 }
 const safeRules = (input) => Object.fromEntries(Object.keys(DEFAULT_RULES).map((key) => [key, input[key]]));
 const fail = (res, error, message) => { console.error(message, error); return res.status(500).json({ message }); };
-router.get("/school-years", async (req, res) => {
+export async function listSchoolYears(req, res) {
   const years = await SchoolYear.find({ ownerId: req.user.id }).sort({ createdAt: -1 }).lean();
   res.json({ activeId: req.academicYear, years: [{ _id: null, name: "Legacy / unassigned records" }, ...years] });
-});
+}
+router.get("/school-years", listSchoolYears);
 router.post("/school-years", async (req, res) => {
   const error = validateInput(req.body?.name, { label: "School year", maxLength: 40 });
   if (error) return res.status(400).json({ message: error });
@@ -101,6 +102,14 @@ router.put("/interventions/:id", async (req, res) => {
   if (!mongoose.isObjectIdOrHexString(req.params.id)) return res.status(400).json({ message: "Invalid intervention ID." });
   const item = await Intervention.findOneAndUpdate({ _id: req.params.id, ownerId: req.user.id }, { $set: validation.value }, { new: true, runValidators: true });
   if (!item) return res.status(404).json({ message: "Intervention not found." }); res.json(item);
+});
+router.delete("/interventions/:id", async (req, res) => {
+  if (!mongoose.isObjectIdOrHexString(req.params.id)) return res.status(400).json({ message: "Invalid intervention ID." });
+  try {
+    const result = await Intervention.deleteOne({ _id: req.params.id, ownerId: req.user.id, schoolYearId: req.academicYear ?? null });
+    if (!result.deletedCount) return res.status(404).json({ message: "Intervention not found." });
+    return res.json({ message: "Intervention deleted." });
+  } catch (error) { return fail(res, error, "Unable to delete the intervention."); }
 });
 router.get("/award-history", async (req, res) => res.json(await AwardCertificate.find({ ownerId: req.user.id }).sort({ createdAt: -1 }).lean()));
 router.post("/award-history", async (req, res) => {

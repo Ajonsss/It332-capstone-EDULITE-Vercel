@@ -8,6 +8,13 @@ import AwardCertificate from "../models/AwardCertificate.js";
 import AuditEvent from "../models/AuditEvent.js";
 import ClassOffering from "../models/ClassOffering.js";
 import { connectMongoDatabase } from "../database/mongo.js";
+import { readFile } from "node:fs/promises";
+
+test("the backend is configured beside the Singapore Atlas cluster", async () => {
+  const config = JSON.parse(await readFile(new URL("../../vercel.json", import.meta.url), "utf8"));
+  assert.deepEqual(config.services.backend.functions[config.services.backend.entrypoint].regions, ["sin1"]);
+  assert.equal(config.functions, undefined, "Function options belong inside the backend service");
+});
 
 test("Vercel app imports without a listener and serves the public API prefix", { timeout: 10000 }, async (t) => {
   const originalUri = process.env.MONGODB_URI;
@@ -45,6 +52,8 @@ test("Vercel app imports without a listener and serves the public API prefix", {
   });
 
   const { default: app } = await import("../app.js");
+  const { createRequire } = await import("node:module");
+  assert.ok(!Object.keys(createRequire(import.meta.url).cache).some((path) => path.includes("exceljs")), "Sign-in startup must not load Excel import dependencies");
   assert.equal(listener.mock.callCount(), 0);
   assert.equal(connectionAttempts, 0);
   listener.mock.restore();
@@ -72,7 +81,9 @@ test("Vercel app imports without a listener and serves the public API prefix", {
   const statuses = await Promise.all(Array.from({ length: 6 }, () => request("/api/gemini/status")));
   for (const response of statuses) assert.equal(response.status, 401);
   assert.equal(connectionAttempts, 1, "Concurrent cold requests share the connection");
-  for (const index of indexes) assert.equal(index.mock.callCount(), 1);
+  for (const index of indexes) assert.equal(index.mock.callCount(), 0, "Read-only cold requests do not build indexes");
+  assert.equal((await request("/api/classes", { grade: 7, section_id: "507f1f77bcf86cd799439011", subject_id: "507f1f77bcf86cd799439012" })).status, 401);
+  for (const index of indexes) assert.equal(index.mock.callCount(), 1, "Academic writes still wait for the unique indexes");
   for (const path of ["/api/students", "/api/students/507f1f77bcf86cd799439011/insights", "/api/gemini/insights/507f1f77bcf86cd799439011/pdf"])
     assert.equal((await request(path)).status, 401);
   for (const path of ["/students", "/api/api/gemini/status", "/api/does-not-exist"]) {

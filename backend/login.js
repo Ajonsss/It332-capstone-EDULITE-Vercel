@@ -191,7 +191,7 @@ router.post(
         });
       }
 
-      if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) return res.status(429).json({ message: "Too many failed attempts. Try again in 15 minutes or use your recovery code." });
+      if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) return res.status(429).json({ message: "Too many failed attempts. Try again in 15 minutes." });
 
       const match =
         await bcrypt.compare(
@@ -208,7 +208,9 @@ router.post(
         });
       }
 
-      await User.updateOne({ _id: user._id }, { $set: { loginFailures: 0, lockedUntil: null } });
+      if (user.loginFailures || user.lockedUntil) {
+        await User.updateOne({ _id: user._id }, { $set: { loginFailures: 0, lockedUntil: null } });
+      }
       const token =
         createToken(user);
 

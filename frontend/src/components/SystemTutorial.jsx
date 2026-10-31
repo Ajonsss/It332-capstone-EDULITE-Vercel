@@ -10,8 +10,8 @@ const STEPS = [
     description: "Follow this guide to set up your class and turn assessment results into learning support.",
     instructions: [
       "On a phone, use the bottom buttons for Dashboard, Records, and AI Insights. Select View all to open the full navigation list. On larger screens, use the navigation on the left and select the EduLITE logo button to expand or collapse it.",
-      "Choose or create the school year in Settings first. Manage your class initially shows registered grade levels; select a grade, section, and subject to reveal enrolled students.",
-      "Use section, subject, and term filters to focus on the class and grading period you want to review.",
+      "Choose or create the school year in Settings first. Manage your class shows grade levels, sections, subjects, and students together, with the first grade, section, and subject selected automatically. Select another option to browse its enrolled students.",
+      "Select Filters to open the sidebar, then choose a section, subject, and term to focus on the class and grading period you want to review.",
     ],
     tip: "You can skip this guide at any time and replay it from Settings.",
   },
@@ -66,8 +66,8 @@ const STEPS = [
     page: "Records & Dashboard",
     description: "Check scores and follow student progress within the correct grading period.",
     instructions: [
-      "Open Records and choose your section, subject, and term filters.",
-      "Search for a student or filter by performance level. Select a student to open their assessment record.",
+      "Open Records and select Filters to choose your section, subject, and term in the sidebar.",
+      "Use the sidebar to search for a student, filter by performance level, or sort the list. Select Done, then choose a student to open their assessment record.",
       "Use the score editing controls to update results, then save or cancel before changing filters.",
       "Return to Dashboard to review class summaries. Complete the required assessment data, including the Term Examination score, to calculate official term grades.",
     ],
@@ -91,9 +91,9 @@ const STEPS = [
     description: "Start with your sections and subjects, then work through the student and assessment steps.",
     instructions: [
       "For printable recognition, open Awards, choose grade or improvement criteria, select eligible recipients, fill in the certificate details, and create a preview before printing.",
-      "Use Interventions to assign practice and record completion, baseline scores, and follow-up results. Saved awards can be reopened from Award history.",
+      "When a generated intervention is complete, select Intervention finished in the AI insight or its saved recommendation to close it. You can then choose to update the student's previous assessment scores; their record opens ready to edit. Select Save scores to apply changes or Cancel to keep the existing grades. Closed recommendations remain available in the student's AI Insights. Saved awards can be reopened from Award history.",
       "At the end of the school year, open Year-End & Archives to review readiness and intervention needs. Finish a student only after reviewing complete results; their year-end record remains available in Archives.",
-      "Settings also contains grading rules, private recovery-code generation, backups, and change history. Save a recovery code and download a backup before major year-end changes.",
+      "Settings also contains grading rules, password changes, session management, backups, and change history. Download a backup before major year-end changes.",
       "Open Settings whenever you need a refresher.",
       "Select Replay Tutorial to restart this walkthrough from the beginning.",
     ],
@@ -158,16 +158,20 @@ function TutorialDialog({ step, setStep, onClose }) {
   const content = STEPS[step];
   const lastStep = step === STEPS.length - 1;
   return createPortal(
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[#25313C]/50 p-3 backdrop-blur-sm sm:p-6">
-      <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="tutorial-title" aria-describedby="tutorial-description" className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto rounded-[24px] bg-[var(--ed-surface)] p-5 shadow-2xl sm:p-8">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-[var(--ed-color-168cc8)]">Getting started · Step {step + 1} of {STEPS.length}</p>
+    <div className="ed-backdrop-enter fixed inset-0 z-[120] flex items-center justify-center bg-[#25313C]/50 p-3 backdrop-blur-sm sm:p-6">
+      <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="tutorial-title" aria-describedby="tutorial-description" className="ed-dialog-enter max-h-[90dvh] w-full max-w-2xl overflow-y-auto rounded-[24px] bg-[var(--ed-surface)] p-5 shadow-2xl sm:p-8">
+        <div className="flex justify-end">
           <button type="button" onClick={onClose} className="rounded-lg px-3 py-2 text-sm text-[var(--ed-color-71808d)] hover:bg-[var(--ed-color-f4f7fa)]">Skip tutorial</button>
         </div>
-        <progress aria-label="Tutorial progress" value={step + 1} max={STEPS.length} className="mt-4 h-2 w-full accent-[var(--ed-primary)]" />
-        <p className="mt-5 text-sm font-semibold text-[var(--ed-color-168cc8)]">{content.page}</p>
-        <h2 ref={titleRef} tabIndex={-1} id="tutorial-title" className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)] outline-none">{content.title}</h2>
+        <div key={step} className="ed-content-enter mt-3 flex items-start gap-4">
+        <p className="shrink-0 text-5xl font-extrabold tabular-nums text-[var(--ed-primary)]" aria-label={`Step ${step + 1} of ${STEPS.length}`}>{step + 1}</p>
+        <div className="min-w-0">
+        <h2 ref={titleRef} tabIndex={-1} id="tutorial-title" className="text-2xl font-bold text-[var(--ed-color-25313c)] outline-none">{content.title}</h2>
         <p id="tutorial-description" className="mt-3 text-sm leading-6 text-[var(--ed-color-71808d)]">{content.description}</p>
+        <p className="mt-3 text-sm text-[var(--ed-muted)]">Step {step + 1} of {STEPS.length} · {content.page}</p>
+        </div>
+        </div>
+        <progress aria-label="Tutorial progress" value={step + 1} max={STEPS.length} className="mt-4 h-2 w-full accent-[var(--ed-primary)]" />
         <ol className="mt-5 list-decimal space-y-3 pl-6 text-sm leading-6 text-[var(--ed-color-52616d)]">
           {content.instructions.map((instruction) => <li key={instruction} className="pl-1">{instruction}</li>)}
         </ol>

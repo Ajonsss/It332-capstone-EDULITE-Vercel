@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 
-export default function ClassSidePanel({ title, busy = false, onClose, children }) {
+export default function ClassSidePanel({ title, busy = false, onClose, children, id, compact = false, closeLabel = "Close class panel", footer }) {
   const panelRef = useRef(null), closeRef = useRef({ busy, onClose });
   const titleId = useId();
   useEffect(() => { closeRef.current = { busy, onClose }; }, [busy, onClose]);
@@ -31,13 +31,14 @@ export default function ClassSidePanel({ title, busy = false, onClose, children 
     };
   }, []);
 
-  return createPortal(<div className="fixed inset-0 z-[100] flex justify-end bg-black/35 backdrop-blur-[2px]" onClick={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} tabIndex={-1} className="flex h-dvh w-full max-w-2xl flex-col border-l border-[var(--ed-border)] bg-[var(--ed-surface)] shadow-2xl outline-none">
+  return createPortal(<div className="ed-backdrop-enter fixed inset-0 z-[100] flex justify-end bg-black/35 backdrop-blur-[2px]" onClick={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+    <section id={id} ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} tabIndex={-1} className={`ed-panel-enter flex h-dvh w-full ${compact ? "max-w-sm" : "max-w-2xl"} flex-col border-l border-[var(--ed-border)] bg-[var(--ed-surface)] shadow-2xl outline-none`}>
       <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--ed-border)] px-5 py-5 sm:px-7">
         <h2 id={titleId} className="text-xl font-bold">{title}</h2>
-        <button data-close-panel type="button" aria-label="Close class panel" disabled={busy} onClick={onClose} className="rounded-xl border border-[var(--ed-border)] px-3 py-2 text-sm disabled:opacity-50">Close</button>
+        <button data-close-panel type="button" aria-label={closeLabel} disabled={busy} onClick={onClose} className="rounded-xl border border-[var(--ed-border)] px-3 py-2 text-sm disabled:opacity-50">Close</button>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 sm:p-7">{children}</div>
+      {footer && <footer className="shrink-0 border-t border-[var(--ed-border)] p-5 sm:px-7">{footer}</footer>}
     </section>
   </div>, document.body);
 }

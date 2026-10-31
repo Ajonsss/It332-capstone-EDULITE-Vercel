@@ -4,7 +4,7 @@ import { JSDOM } from "jsdom";
 import { createServer } from "vite";
 import axios from "axios";
 
-test("class browser reveals grade, section, subject and students, with guided setup in a right panel", async (t) => {
+test("class browser shows grade, section, subject and students, with guided setup in a right panel", async (t) => {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: "http://localhost/" });
   globalThis.window = dom.window; globalThis.document = dom.window.document; globalThis.localStorage = dom.window.localStorage;
   globalThis.HTMLElement = dom.window.HTMLElement; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -28,7 +28,9 @@ test("class browser reveals grade, section, subject and students, with guided se
   };
   t.mock.method(axios, "get", async (url) => {
     const key = url.replace("/api/", "");
-    const data = key.startsWith("students/") ? key.endsWith("/insights") ? [] : students.find((student) => key === `students/${student.id}`) : {
+    const data = key === "dashboard" ? { students, sections, subjects, classes, assessments: [], assessmentRecords: [], gradeSummaries: [],
+      schoolYears: { years: [{ _id: "year", name: "2026–2027" }], activeId: "year" }, gradingRules: { passingGrade: 75, highPerformingGrade: 90 } }
+      : key.startsWith("students/") ? key.endsWith("/insights") ? [] : students.find((student) => key === `students/${student.id}`) : {
       students, sections, subjects, classes, assessments: [], "assessment-records": [], "grade-summaries": [],
       "school-years": { years: [{ _id: "year", name: "2026–2027" }], activeId: "year" }, "grading-rules": { passingGrade: 75, highPerformingGrade: 90 },
     }[key];
@@ -95,18 +97,26 @@ test("class browser reveals grade, section, subject and students, with guided se
   await click(document.querySelector('[aria-label="Main navigation"] [aria-label="Manage your class"]'));
   await waitFor(() => column("Grade Levels"));
 
-  await t.test("only registered grades appear first and each click reveals only the next scoped column", async () => {
-    assert.deepEqual([...document.querySelector('[aria-label="Class management columns"]').children].map((item) => item.getAttribute("aria-label")), ["Grade Levels"]);
+  await t.test("all columns appear immediately with the first option selected and remain scoped when switching grades", async () => {
+    assert.deepEqual([...document.querySelector('[aria-label="Class management columns"]').children].map((item) => item.getAttribute("aria-label")), ["Grade Levels", "Sections", "Subjects", "Students"]);
     assert.ok(choice("Grade Levels", "Grade 9"), "empty registered classes remain visible");
     assert.equal(document.querySelector('form'), null);
-    await click(choice("Grade Levels", "Grade 7")); assert.ok(column("Sections")); assert.equal(column("Subjects"), null);
+    assert.equal(choice("Grade Levels", "Grade 7").getAttribute("aria-pressed"), "true");
+    assert.equal(choice("Sections", "Rose").getAttribute("aria-pressed"), "true");
+    assert.equal(choice("Subjects", "Math").getAttribute("aria-pressed"), "true");
+    assert.deepEqual(names(), ["Alice Santos"]);
     assert.ok(choice("Sections", "Rose")); assert.equal(choice("Sections", "Lily"), undefined);
-    await click(choice("Sections", "Rose")); assert.ok(column("Subjects")); assert.equal(column("Students"), null);
     assert.ok(choice("Subjects", "Math")); assert.equal(choice("Subjects", "Science"), undefined);
-    await click(choice("Subjects", "Math")); assert.deepEqual(names(), ["Alice Santos"]);
-    await click(choice("Grade Levels", "Grade 8")); assert.equal(column("Subjects"), null); assert.equal(column("Students"), null);
-    await click(choice("Sections", "Lily")); assert.ok(choice("Subjects", "Science")); assert.equal(choice("Subjects", "Math"), undefined);
-    await click(button("Grade levels")); assert.equal(column("Sections"), null);
+    await click(choice("Grade Levels", "Grade 8"));
+    assert.equal(choice("Sections", "Lily").getAttribute("aria-pressed"), "true");
+    assert.equal(choice("Subjects", "Science").getAttribute("aria-pressed"), "true");
+    assert.equal(choice("Subjects", "Math"), undefined); assert.deepEqual(names(), ["Bob Cruz"]);
+    await click(choice("Grade Levels", "Grade 9"));
+    assert.equal(choice("Subjects", "Math").getAttribute("aria-pressed"), "true");
+    assert.deepEqual(names(), []); assert.match(column("Students").textContent, /No students enrolled yet/);
+    await click(button("Grade levels"));
+    assert.equal(choice("Grade Levels", "Grade 7").getAttribute("aria-pressed"), "true");
+    assert.deepEqual(names(), ["Alice Santos"]);
   });
   await t.test("the survey opens on the right and cancels without writes before saving", async () => {
     const opener = button("Add class"); opener.focus(); await click(opener);
@@ -119,13 +129,13 @@ test("class browser reveals grade, section, subject and students, with guided se
     await React.act(async () => document.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
     assert.equal(dialog(), null); assert.equal(writes.length, 0); assert.ok(document.activeElement === opener); assert.equal(document.body.style.overflow, "");
   });
-  await t.test("Modify class sits beside Add class and can choose a class before a browser selection", async () => {
+  await t.test("Modify class sits beside Add class and prefills the default browser selection", async () => {
     const opener = button("Modify class");
     assert.ok(opener.parentElement === button("Add class").parentElement);
     opener.focus(); await click(opener);
     assert.match(dialog().textContent, /Modify class/);
-    assert.equal(document.querySelector('[aria-label="Class to modify"]').value, "");
-    assert.equal(button("Save changes", dialog()).disabled, true);
+    assert.equal(document.querySelector('[aria-label="Class to modify"]').value, "7:rose");
+    assert.equal(button("Save changes", dialog()).disabled, false);
     await change('[aria-label="Class to modify"]', "9:lily");
     assert.equal(document.querySelector('[aria-label="Modify class grade level"]').value, "9");
     await change('[aria-label="Modify class grade level"]', "11");
@@ -192,6 +202,29 @@ test("class browser reveals grade, section, subject and students, with guided se
     await change("#student-surname", "Rivera"); await click(button("Update Student", dialog())); assert.equal(dialog(), null); assert.deepEqual(names(), ["Mateo Cruz", "Nina Rivera"]);
     await click(document.querySelector('[aria-label="Delete student Nina Rivera"]')); assert.deepEqual(names(), ["Mateo Cruz"]);
     await click(document.querySelector('[aria-label="View records for Mateo Cruz"]')); assert.ok(document.querySelector('[aria-label="View assessment record for Mateo Cruz"]'));
+  });
+  await t.test("Records creates, edits and deletes students without leaving the page", async () => {
+    const onRecordsPage = () => assert.equal(document.querySelector("h1").textContent, "Student Assessment Records");
+    onRecordsPage();
+    await click(button("Edit info")); await waitFor(() => document.querySelector("#student-surname"));
+    await change("#student-surname", "Rivera"); await click(button("Update Student", dialog()));
+    assert.equal(dialog(), null); onRecordsPage();
+    assert.ok(document.querySelector('[aria-label="View assessment record for Mateo Rivera"]'));
+    await click(button("Add student")); await waitFor(() => document.querySelector("#student-first-name"));
+    await click(button("Cancel", dialog())); assert.equal(dialog(), null); onRecordsPage();
+    await click(button("Add student")); await waitFor(() => document.querySelector("#student-first-name"));
+    await change("#student-first-name", "Ella"); await change("#student-surname", "Cruz");
+    await change("#student-grade", "11"); await change("#student-section", "Rose");
+    await click([...dialog().querySelectorAll('input[type="checkbox"]')].find((input) => input.closest("label").textContent.includes("Music")));
+    await click(button("Save Student", dialog())); assert.equal(dialog(), null); onRecordsPage();
+    assert.ok(document.querySelector('[aria-label="View assessment record for Ella Cruz"]'));
+    await click(document.querySelector('[aria-label="View assessment record for Ella Cruz"]'));
+    const before = writes.length;
+    window.confirm = () => false; await click(button("Delete student")); assert.equal(writes.length, before);
+    window.confirm = () => true; await click(button("Delete student"));
+    assert.equal(document.querySelector('[aria-label="View assessment record for Ella Cruz"]'), null);
+    assert.equal(document.querySelector('button[aria-current="true"]').getAttribute("aria-label"), "View assessment record for Alice Santos");
+    onRecordsPage();
   });
   await t.test("a new subject can enroll individual or all registered students from only its grade and section", async () => {
     await click(document.querySelector('[aria-label="Main navigation"] [aria-label="Manage your class"]'));

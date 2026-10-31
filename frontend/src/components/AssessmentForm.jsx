@@ -79,7 +79,7 @@ function getSlotLabel(category, sequence) {
   const option = getCategoryOption(category);
   const numericSequence = Number(sequence);
 
-  if (!option || !Number.isInteger(numericSequence)) {
+  if (!option || !Number.isInteger(numericSequence) || numericSequence < 1) {
     return "Unassigned";
   }
 
@@ -102,6 +102,7 @@ export default function AssessmentForm({
   const [enrolledStudents, setEnrolledStudents] = useState([]);
   const [sections, setSections] = useState([]);
   const [classes, setClasses] = useState([]);
+  const [existingAssessments, setExistingAssessments] = useState([]);
   const [scores, setScores] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -120,14 +121,23 @@ export default function AssessmentForm({
     [formData.category],
   );
 
+  const slotContextReady = Boolean(formData.subject_id && formData.term && selectedCategory
+    && (formData.class_sections === null || formData.class_sections.length));
   const sequenceOptions = useMemo(() => {
+    if (!slotContextReady) return [];
     const maximum = selectedCategory?.maxSequence ?? 0;
-
-    return Array.from(
-      { length: maximum },
-      (_, index) => index + 1,
-    );
-  }, [selectedCategory]);
+    const occupied = new Set(existingAssessments.filter((assessment) =>
+      String(assessment.id) !== String(resolvedAssessmentId)
+      && String(assessment.subject_id) === String(formData.subject_id)
+      && Number(assessment.term) === Number(formData.term) && assessment.category === formData.category
+      && (formData.class_sections === null || !assessment.class_sections?.length
+        || formData.class_sections.some((section) => assessment.class_sections.some((entry) =>
+          Number(entry.grade) === Number(section.grade) && String(entry.section_id) === String(section.section_id)))))
+      .map((assessment) => Number(assessment.sequence)));
+    return Array.from({ length: maximum }, (_, index) => index + 1).filter((sequence) => !occupied.has(sequence));
+  }, [selectedCategory, slotContextReady, existingAssessments, resolvedAssessmentId, formData.subject_id, formData.term, formData.category, formData.class_sections]);
+  const selectedSequence = sequenceOptions.includes(Number(formData.sequence)) ? formData.sequence : String(sequenceOptions[0] ?? "");
+  const slotsFull = slotContextReady && sequenceOptions.length === 0;
 
   const sectionOptions = useMemo(() => buildClassHierarchy({ students: enrolledStudents, sections, subjects, classes })
     .flatMap((grade) => grade.sections.filter((section) => section.subjects.some((subject) => subject.id === formData.subject_id))
@@ -152,11 +162,13 @@ export default function AssessmentForm({
       setFormData(emptyAssessmentForm());
       setEnrolledStudents([]);
       setScores({});
+      setExistingAssessments([]);
 
       try {
-        const [subjectResponse, ruleResponse, studentResponse, sectionResponse, classResponse] = await Promise.all([
+        const [subjectResponse, ruleResponse, studentResponse, sectionResponse, classResponse, assessmentListResponse] = await Promise.all([
           axios.get(`${API_URL}/subjects`), axios.get(`${API_URL}/grading-rules`), axios.get(`${API_URL}/students`),
           axios.get(`${API_URL}/sections`), axios.get(`${API_URL}/classes`),
+          axios.get(`${API_URL}/assessments`),
         ]);
         if (!cancelled) setGradingRules(ruleResponse.data);
 
@@ -169,6 +181,7 @@ export default function AssessmentForm({
         setEnrolledStudents(studentResponse.data ?? []);
         setSections(sectionResponse.data ?? []);
         setClasses(classResponse.data ?? []);
+        setExistingAssessments(assessmentListResponse.data ?? []);
 
         if (isEditing) {
           const assessmentResponse = await axios.get(
@@ -343,12 +356,12 @@ export default function AssessmentForm({
       return;
     }
 
-    const sequence = parseWholeNumber(formData.sequence);
+    const sequence = parseWholeNumber(selectedSequence);
 
     if (
       !Number.isInteger(sequence) ||
       sequence < 1 ||
-      sequence > selectedCategory.maxSequence
+      sequence > selectedCategory.maxSequence || !sequenceOptions.includes(sequence)
     ) {
       setError("Select a valid ECR assessment slot.");
       return;
@@ -445,12 +458,9 @@ export default function AssessmentForm({
       className="overflow-hidden rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)]"
     >
       <div className="border-b border-[var(--ed-color-eef2f5)] px-6 py-6 sm:px-8 sm:py-7">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ed-primary)]">
-          Three-Term ECR
-        </p>
         <h2
           id="assessment-form-title"
-          className="mt-2 text-3xl font-extrabold tracking-[-0.03em] text-[var(--ed-primary)]"
+          className="text-3xl font-extrabold tracking-[-0.03em] text-[var(--ed-primary)]"
         >
           {isEditing ? "Edit Assessment" : "Create Assessment"}
         </h2>
@@ -601,21 +611,27 @@ export default function AssessmentForm({
                   <FormLabel htmlFor="assessment-sequence" label="ECR Slot" required />
                   <select
                     id="assessment-sequence"
-                    value={formData.sequence}
+                    value={selectedSequence}
                     onChange={(event) =>
                       setFormData((current) => ({ ...current, sequence: event.target.value }))
                     }
-                    disabled={!selectedCategory}
+                    disabled={saving || !slotContextReady || slotsFull}
+                    aria-describedby="assessment-slot-help"
                     className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)] focus:ring-4 focus:ring-[var(--ed-primary)]/10 disabled:bg-[var(--ed-color-f0f3f5)]"
                     required
                   >
-                    <option value="">Select a slot</option>
+                    <option value="">{slotsFull ? "No available slots" : "Select a slot"}</option>
                     {sequenceOptions.map((sequence) => (
                       <option key={sequence} value={sequence}>
                         {getSlotLabel(formData.category, sequence)}
                       </option>
                     ))}
                   </select>
+                  <p id="assessment-slot-help" role={slotsFull ? "status" : undefined} className="mt-2 text-xs text-[var(--ed-color-71808d)]">
+                    {slotsFull ? `All ${selectedCategory.label} slots are already used for the selected subject, term, and sections. Choose another component, term, or section, or edit an existing assessment.`
+                      : !slotContextReady ? "Choose a subject, section, term, and component to see available slots."
+                      : "Only slots not already used in the selected sections are shown."}
+                  </p>
                 </div>
 
                 <div>
@@ -653,7 +669,7 @@ export default function AssessmentForm({
               </div>
 
               <div className="mt-5 rounded-[14px] bg-[var(--ed-color-f4f7fa)] p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ed-color-8a98a5)]">
+                <p className="text-sm font-semibold text-[var(--ed-color-8a98a5)]">
                   ECR Position
                 </p>
                 <p className="mt-1.5 font-semibold text-[var(--ed-color-25313c)]">
@@ -661,7 +677,7 @@ export default function AssessmentForm({
                   {" · "}
                   {selectedCategory?.label ?? "No component"}
                   {" · "}
-                  {getSlotLabel(formData.category, formData.sequence)}
+                  {getSlotLabel(formData.category, selectedSequence)}
                 </p>
               </div>
             </section>
@@ -686,10 +702,10 @@ export default function AssessmentForm({
                   <table className="w-full min-w-[650px]">
                     <thead className="bg-[var(--ed-color-f8fafb)]">
                       <tr className="border-b border-[var(--ed-color-e3e9ee)]">
-                        <th className="px-5 py-3.5 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ed-color-8a98a5)]">Student</th>
-                        <th className="px-5 py-3.5 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ed-color-8a98a5)]">Grade</th>
-                        <th className="px-5 py-3.5 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ed-color-8a98a5)]">Section</th>
-                        <th className="px-5 py-3.5 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ed-color-8a98a5)]">Raw Score</th>
+                        <th className="px-5 py-3.5 text-left text-sm font-semibold text-[var(--ed-color-8a98a5)]">Student</th>
+                        <th className="px-5 py-3.5 text-center text-sm font-semibold text-[var(--ed-color-8a98a5)]">Grade</th>
+                        <th className="px-5 py-3.5 text-center text-sm font-semibold text-[var(--ed-color-8a98a5)]">Section</th>
+                        <th className="px-5 py-3.5 text-center text-sm font-semibold text-[var(--ed-color-8a98a5)]">Raw Score</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--ed-color-eef2f5)]">
@@ -742,7 +758,7 @@ export default function AssessmentForm({
               </button>
               <button
                 type="submit"
-                disabled={saving || subjects.length === 0}
+                disabled={saving || subjects.length === 0 || slotsFull}
                 className="rounded-[12px] bg-[var(--ed-primary)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--ed-primary-hover)] disabled:bg-[var(--ed-color-c8d1d8)]"
               >
                 {saving ? "Saving..." : isEditing ? "Update Assessment" : "Save Assessment"}

@@ -24,7 +24,7 @@ import studentLifecycleRoutes from "./studentLifecycle.js";
 import loginRoutes from "./login.js";
 import sectionRoutes from "./section.js";
 import studentRoutes from "./student.js";
-import studentImportRoutes from "./studentImport.js";
+import dashboardRoutes from "./dashboard.js";
 import subjectRoutes from "./subject.js";
 import assessmentRoutes from "./assessment.js";
 import { validateRequestInputs } from "./middleware/inputValidation.js";
@@ -66,9 +66,11 @@ function initializeDatabase() {
 
 api.use(async (req, res, next) => {
   try {
-    await initializeDatabase();
-    // Reconnect after a disconnected warm function instance, if necessary.
     await connectMongoDatabase();
+    // Index setup belongs on academic writes, never on sign-in or dashboard
+    // reads. Keep the same unique indexes in place before mutations can run.
+    if (!["GET", "HEAD", "OPTIONS"].includes(req.method)
+      && !["/login", "/register"].includes(req.path) && !req.path.startsWith("/account/")) await initializeDatabase();
     next();
   } catch (error) {
     next(error);
@@ -85,13 +87,21 @@ api.use(async (req, res, next) => {
   when student.js is converted.
 */
 api.use(accountRoutes);
+api.use(dashboardRoutes);
 api.use(teacherToolsRoutes);
 api.use(loginRoutes);
 api.use(sectionRoutes);
 api.use(classManagementRoutes);
 api.use(studentLifecycleRoutes);
 api.use(studentRoutes);
-api.use(studentImportRoutes);
+let studentImportRouter;
+api.use(async (req, res, next) => {
+  if (!/^\/students\/import(?:\/|$)/i.test(req.path)) return next();
+  try {
+    studentImportRouter ??= import("./studentImport.js").catch((error) => { studentImportRouter = undefined; throw error; });
+    return (await studentImportRouter).default(req, res, next);
+  } catch (error) { next(error); }
+});
 api.use(subjectRoutes);
 api.use(assessmentRoutes);
 // AI/PDF dependencies are only needed for these routes, not for sign-in or

@@ -844,6 +844,8 @@ function formatSavedInsight(insight) {
     focusLabel: insight.focusLabel,
     model: insight.model,
     title: insight.title,
+    status: insight.status ?? "active",
+    completedAt: insight.completedAt ?? null,
     createdAt: insight.createdAt,
     pdfUrl: `/api/gemini/insights/${insight._id}/pdf`,
     result: insight.result,
@@ -902,6 +904,37 @@ router.get(
     }
   },
 );
+
+// ===================================
+// FINISH OR DELETE SAVED INSIGHTS
+// ===================================
+
+router.patch("/gemini/insights/:insightId/finish", requireAuth, async (req, res) => {
+  if (!isValidId(req.params.insightId)) return res.status(400).json({ message: "A valid insight ID is required." });
+  const filter = { _id: req.params.insightId, ownerId: req.user.id, schoolYearId: req.academicYear ?? null, supportType: "intervention" };
+  try {
+    const updated = await StudentAiInsight.findOneAndUpdate({ ...filter, status: { $ne: "completed" } },
+      { $set: { status: "completed", completedAt: new Date() } }, { new: true, runValidators: true }).select("-pdfData").lean();
+    const insight = updated ?? await StudentAiInsight.findOne(filter).select("-pdfData").lean();
+    if (!insight) return res.status(404).json({ message: "Intervention recommendation not found." });
+    return res.json(formatSavedInsight(insight));
+  } catch (error) {
+    console.error("Finish saved intervention failed:", error);
+    return res.status(500).json({ message: "Unable to finish the intervention. Please try again." });
+  }
+});
+
+router.delete("/gemini/insights/:insightId", requireAuth, async (req, res) => {
+  if (!isValidId(req.params.insightId)) return res.status(400).json({ message: "A valid insight ID is required." });
+  try {
+    const result = await StudentAiInsight.deleteOne({ _id: req.params.insightId, ownerId: req.user.id, schoolYearId: req.academicYear ?? null });
+    if (!result.deletedCount) return res.status(404).json({ message: "Saved recommendation not found." });
+    return res.json({ message: "Saved recommendation deleted." });
+  } catch (error) {
+    console.error("DELETE saved insight failed:", error);
+    return res.status(500).json({ message: "Unable to delete the saved recommendation." });
+  }
+});
 
 // ===================================
 // DOWNLOAD SAVED INSIGHT PDF

@@ -1,0 +1,33 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { once } from "node:events";
+import express from "express";
+import mongoose from "mongoose";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
+import loginRouter from "../login.js";
+
+test("healthy sign-ins skip redundant writes while failure counters and lockouts remain enforced", async (t) => {
+  const previous = process.env.JWT_SECRET; process.env.JWT_SECRET = "login-loading-test-secret";
+  t.after(() => { if (previous === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = previous; });
+  const user = { _id: new mongoose.Types.ObjectId(), name: "Teacher", password: await bcrypt.hash("CorrectPassword1!", 4), loginFailures: 0, lockedUntil: null, sessionVersion: 2 };
+  const writes = [];
+  t.mock.method(User, "findOne", async (filter) => { assert.equal(filter.nameKey, "teacher"); return user; });
+  t.mock.method(User, "updateOne", async (filter, update) => { assert.equal(String(filter._id), String(user._id)); writes.push(update); Object.assign(user, update.$set); });
+  const app = express(); app.use(express.json(), loginRouter);
+  const server = app.listen(0, "127.0.0.1"); await once(server, "listening");
+  t.after(() => new Promise((resolve) => { server.close(resolve); server.closeAllConnections(); }));
+  const send = (password = "CorrectPassword1!") => fetch(`http://127.0.0.1:${server.address().port}/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "Teacher", password }) });
+  const response = await send(); assert.equal(response.status, 200); assert.equal(writes.length, 0);
+  const body = await response.json(); assert.equal(body.user.name, "Teacher"); assert.equal(body.user.password, undefined);
+  const token = jwt.verify(body.token, process.env.JWT_SECRET, { issuer: "edulite-api", audience: "edulite-frontend", algorithms: ["HS256"] });
+  assert.equal(token.sub, String(user._id)); assert.equal(token.sessionVersion, 2);
+  assert.equal((await send("incorrect")).status, 400); assert.equal(user.loginFailures, 1);
+  assert.equal((await send()).status, 200); assert.equal(user.loginFailures, 0); assert.equal(user.lockedUntil, null);
+  assert.equal(writes.length, 2, "an actual failure is recorded and then reset after successful authentication");
+  user.loginFailures = 4;
+  assert.equal((await send("incorrect")).status, 400); assert.equal(user.loginFailures, 5); assert.ok(user.lockedUntil > new Date());
+  const before = writes.length;
+  assert.equal((await send()).status, 429); assert.equal(writes.length, before);
+});
