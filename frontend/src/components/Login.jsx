@@ -6,6 +6,7 @@ import ValidatedInput from "./ValidatedInput";
 import { validateInput } from "../../../shared/inputValidation.mjs";
 
 import { API_URL } from "../utils/api.js";
+import { SCHEDULE_REMINDER_DISMISSED } from "../utils/assessmentSchedule.js";
 import { usePageTitle } from "../utils/usePageTitle.js";
 import { loadDashboard } from "../utils/loadDashboard.js";
 
@@ -114,6 +115,7 @@ export default function Login() {
         JSON.stringify(user),
       );
 
+      window.sessionStorage.removeItem(SCHEDULE_REMINDER_DISMISSED);
       navigate("/dashboard");
     } catch (requestError) {
       showError(

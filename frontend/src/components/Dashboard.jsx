@@ -9,12 +9,21 @@ import FilterSidebar from "./FilterSidebar";
 import MobileNavigation from "./MobileNavigation";
 import LoadingIndicator from "./LoadingIndicator";
 import ClassSidePanel from "./ClassSidePanel";
+import TeachingDashboard from "./TeachingDashboard";
+import AssessmentStatusControl, { AssessmentStatusBadge } from "./AssessmentStatusControl";
 import { NAVIGATION_ITEMS, isNavigationItemActive } from "../utils/navigation.js";
 import { usePageTitle } from "../utils/usePageTitle.js";
-import { buildPerformanceRoster, getPerformanceStatus, hasPerformanceGrade, PERFORMANCE_LEVELS, summarizeTermPerformance } from "../utils/performance";
+import { buildPerformanceRoster, getPerformanceStatus, getTermPerformanceGrade, hasPerformanceGrade, PERFORMANCE_LEVELS, summarizeTermPerformance } from "../utils/performance";
+import { buildStudentAssessmentHistory } from "../utils/dashboardAnalytics.js";
 
-import { API_URL } from "../utils/api.js";
+import { API_URL, schoolYearRequest } from "../utils/api.js";
+import { TERM_NUMBERS, termLabel } from "../../../shared/academicTerms.mjs";
 import { assessmentIncludesStudent } from "../../../shared/assessmentScope.mjs";
+import { ASSESSMENT_STATUS } from "../../../shared/assessmentStatus.mjs";
+import {
+  assessmentStatusIndicator, ASSESSMENT_STATUS_LABELS, formatScheduledDate, SCHEDULE_REMINDER_DISMISSED, todayAsInputValue,
+} from "../utils/assessmentSchedule.js";
+import "./dashboardFolderTabs.css";
 
 const SystemTutorial = lazy(() => import("./SystemTutorial"));
 const SettingsView = lazy(() => import("./SettingsView"));
@@ -23,6 +32,13 @@ const AwardsView = lazy(() => import("./AwardsView"));
 const ClassManagementView = lazy(() => import("./ClassManagementView"));
 const AssessmentForm = lazy(() => import("./AssessmentForm"));
 const StudentForm = lazy(() => import("./StudentForm"));
+
+const TERM_FILTER_OPTIONS = TERM_NUMBERS.map((term) => ({ value: String(term), label: termLabel(term) }));
+const ASSESSMENT_STATUS_FILTERS = [
+  { value: "ALL", label: "All" },
+  ...[ASSESSMENT_STATUS.NOT_CONDUCTED, "today", ASSESSMENT_STATUS.SCHEDULED, ASSESSMENT_STATUS.DONE]
+    .map((value) => ({ value, label: ASSESSMENT_STATUS_LABELS[value] })),
+];
 
 const PAGE_DETAILS = {
   yearEnd: { title: "Year-End & Archives", description: "Review promotion and intervention needs, finish year levels, and revisit archived student records." },
@@ -60,7 +76,7 @@ const PAGE_DETAILS = {
 };
 
 export default function Dashboard() {
-  const [activeYearName, setActiveYearName] = useState("Legacy / unassigned records");
+  const [schoolYears, setSchoolYears] = useState({ activeId: null, years: [] });
   const [gradingRules, setGradingRules] = useState({ passingGrade: 75, highPerformingGrade: 90 });
   const [students, setStudents] = useState([]);
   const [sections, setSections] = useState([]);
@@ -73,7 +89,9 @@ export default function Dashboard() {
   const [selectedSection, setSelectedSection] = useState("ALL");
   const [selectedTerm, setSelectedTerm] = useState("1");
   const [selectedSubject, setSelectedSubject] = useState("ALL");
+  const [selectedAssessmentStatus, setSelectedAssessmentStatus] = useState("ALL");
   const [toasts, setToasts] = useState([]);
+  const [showScheduleReminder, setShowScheduleReminder] = useState(false);
   const toastCounterRef = useRef(0);
   const toastTimersRef = useRef(new Map());
   const [editingStudentId, setEditingStudentId] = useState(null);
@@ -83,10 +101,19 @@ export default function Dashboard() {
   const [tutorialUserId, setTutorialUserId] = useState(null);
   const [tutorialReplayRequest, setTutorialReplayRequest] = useState(0);
   const [activeView, setActiveView] = useState("dashboard");
+  const [folderTabsHost, setFolderTabsHost] = useState(null);
   const [studentFormId, setStudentFormId] = useState(null);
   const [studentEditorOpen, setStudentEditorOpen] = useState(false);
   const [deletingStudentId, setDeletingStudentId] = useState(null);
   const [assessmentFormId, setAssessmentFormId] = useState(null);
+  const activeYearName = schoolYears.years.find((year) => String(year._id ?? "") === String(schoolYears.activeId ?? ""))?.name ?? "Legacy / unassigned records";
+  const dashboardData = useMemo(() => ({
+    schoolYears, students, sections, subjects, classes: registeredClasses, assessments, assessmentRecords, gradeSummaries, gradingRules,
+  }), [schoolYears, students, sections, subjects, registeredClasses, assessments, assessmentRecords, gradeSummaries, gradingRules]);
+
+  const scheduledAssessments = useMemo(() => assessments
+    .filter(({ status }) => status === ASSESSMENT_STATUS.SCHEDULED)
+    .sort((first, second) => (first.date || "9999").localeCompare(second.date || "9999")), [assessments]);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     const savedPreference = localStorage.getItem("eduliteSidebarCollapsed");
@@ -111,6 +138,15 @@ export default function Dashboard() {
   const [studentInsightErrors, setStudentInsightErrors] = useState({});
 
   const navigate = useNavigate();
+
+  const dismissScheduleReminder = () => {
+    window.sessionStorage.setItem(SCHEDULE_REMINDER_DISMISSED, "true");
+    setShowScheduleReminder(false);
+  };
+
+  const updateAssessmentStatus = (id, status) => {
+    setAssessments((current) => current.map((assessment) => assessment.id === id ? { ...assessment, status } : assessment));
+  };
 
   const dismissToast = (toastId) => {
     const existingTimer = toastTimersRef.current.get(toastId);
@@ -258,40 +294,32 @@ export default function Dashboard() {
     loadInitialDashboard();
   }, [navigate]);
 
-  const fetchDashboardData = async ({ silent = false } = {}) => {
-    if (!silent) {
-      setLoading(true);
+  const applyDashboardData = (data) => {
+    setSchoolYears(data.schoolYears);
+    setGradingRules(data.gradingRules);
+    setStudents(data.students);
+    setSections(data.sections);
+    setSubjects(data.subjects);
+    setRegisteredClasses(data.classes ?? []);
+    setAssessments(data.assessments);
+    setAssessmentRecords(data.assessmentRecords);
+    setGradeSummaries(data.gradeSummaries ?? []);
+    if (selectedSection !== "ALL" && !data.sections.some((section) => section.name === selectedSection)) {
+      setSelectedSection("ALL");
     }
+    if (selectedSubject !== "ALL" && !data.subjects.some((subject) => String(subject.id) === String(selectedSubject))) {
+      setSelectedSubject("ALL");
+    }
+  };
 
+  const fetchDashboardData = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const { data } = await axios.get(`${API_URL}/dashboard`);
-      const { students: loadedStudents, sections: loadedSections, subjects: loadedSubjects, assessments: loadedAssessments,
-        assessmentRecords: loadedRecords, gradeSummaries: loadedSummaries, schoolYears, gradingRules: loadedRules, classes: loadedClasses } = data;
-      setActiveYearName(schoolYears.years.find((year) => String(year._id ?? "") === String(schoolYears.activeId ?? ""))?.name ?? "School year");
-      setGradingRules(loadedRules);
-      setStudents(loadedStudents);
-      setSections(loadedSections);
-      setSubjects(loadedSubjects);
-      setRegisteredClasses(loadedClasses ?? []);
-      setAssessments(loadedAssessments);
-      setAssessmentRecords(loadedRecords);
-      setGradeSummaries(loadedSummaries ?? []);
-      if (
-        selectedSection !== "ALL" &&
-        !loadedSections.some(
-          (section) => section.name === selectedSection,
-        )
-      ) {
-        setSelectedSection("ALL");
-      }
-
-      if (
-        selectedSubject !== "ALL" &&
-        !loadedSubjects.some(
-          (subject) => String(subject.id) === String(selectedSubject),
-        )
-      ) {
-        setSelectedSubject("ALL");
+      applyDashboardData(data);
+      if (!silent && !window.sessionStorage.getItem(SCHEDULE_REMINDER_DISMISSED)
+        && data.assessments.some(({ status }) => status === ASSESSMENT_STATUS.SCHEDULED)) {
+        setShowScheduleReminder(true);
       }
     } catch (err) {
       console.error("Error loading dashboard:", err);
@@ -454,8 +482,8 @@ export default function Dashboard() {
   const selectedSubjectId =
     selectedSubject === "ALL" ? null : String(selectedSubject);
 
-  const generateStudentRecommendation = async (student, supportType) => {
-    const requestKey = `${supportType}-${student.id}`;
+  const generateStudentRecommendation = async (student, supportType, scope) => {
+    const requestKey = scope ? `${supportType}-${student.id}-${scope.subjectId}` : `${supportType}-${student.id}`;
 
     if (generatingRecommendationKey) {
       return;
@@ -470,16 +498,17 @@ export default function Dashboard() {
         `${API_URL}/gemini/student-support/${student.id}`,
         {
           support_type: supportType,
-          focus_subject_id: selectedSubjectId,
-          term: Number(selectedTerm),
+          focus_subject_id: scope?.subjectId ?? selectedSubjectId,
+          term: Number(scope?.term ?? selectedTerm),
         },
+        schoolYearRequest(scope?.year),
       );
 
       const { savedInsight, ...result } = response.data;
 
       setAiRecommendation({
         ...result,
-        savedInsight,
+        savedInsight: savedInsight && { ...savedInsight, reportingYear: scope?.year },
       });
 
       if (savedInsight) {
@@ -547,11 +576,12 @@ export default function Dashboard() {
         completedAt: insight.completedAt,
         createdAt: insight.createdAt,
         pdfUrl: insight.pdfUrl,
+        reportingYear: insight.reportingYear,
       },
     });
   };
 
-  const loadStudentInsights = async (studentId, force = false) => {
+  const loadStudentInsights = async (studentId, force = false, year) => {
     if (
       !force &&
       Object.prototype.hasOwnProperty.call(studentInsightsById, studentId)
@@ -569,11 +599,12 @@ export default function Dashboard() {
     try {
       const response = await axios.get(
         `${API_URL}/students/${studentId}/insights`,
+        schoolYearRequest(year),
       );
 
       setStudentInsightsById((current) => ({
         ...current,
-        [studentId]: response.data,
+        [studentId]: response.data ?? [],
       }));
     } catch (err) {
       setStudentInsightErrors((current) => ({
@@ -594,19 +625,20 @@ export default function Dashboard() {
     await loadStudentInsights(student.id);
   };
 
-  const handleDeleteInsight = async (studentId, insightId) => {
-    await axios.delete(`${API_URL}/gemini/insights/${insightId}`);
+  const handleDeleteInsight = async (studentId, insightId, year) => {
+    await axios.delete(`${API_URL}/gemini/insights/${insightId}`, schoolYearRequest(year));
     setStudentInsightsById((current) => ({ ...current, [studentId]: (current[studentId] ?? []).filter((insight) => insight.id !== insightId) }));
     if (aiRecommendation?.savedInsight?.id === insightId) closeAiRecommendation();
   };
 
   const handleFinishInsight = async (insight) => {
-    const { data: updated } = await axios.patch(`${API_URL}/gemini/insights/${insight.id}/finish`);
+    const { data: updated } = await axios.patch(`${API_URL}/gemini/insights/${insight.id}/finish`, undefined, schoolYearRequest(insight.reportingYear));
     setStudentInsightsById((current) => Object.prototype.hasOwnProperty.call(current, updated.studentId)
       ? { ...current, [updated.studentId]: current[updated.studentId].map((item) => item.id === updated.id ? { ...item, ...updated } : item) }
       : current);
     setAiRecommendation((current) => current?.savedInsight?.id === updated.id ? { ...current, savedInsight: { ...current.savedInsight, ...updated } } : current);
 
+    if (insight.reportingYear !== undefined && insight.reportingYear !== String(schoolYears.activeId ?? "legacy")) return;
     const student = students.find((item) => String(item.id) === String(updated.studentId));
     if (!window.confirm(`Intervention finished. Would you like to update ${student?.name ?? "this student"}'s grades from previous assessments?`)) return;
     if (!student) {
@@ -885,31 +917,6 @@ export default function Dashboard() {
     (student) => student.averagePercentage !== null,
   );
 
-  const classAverage =
-    assessedStudents.length > 0
-      ? assessedStudents.reduce(
-          (total, student) =>
-            total + student.averagePercentage,
-          0,
-        ) / assessedStudents.length
-      : 0;
-
-  const excellentStudents = assessedStudents.filter(
-    (student) => student.averagePercentage >= 90,
-  );
-
-  const verySatisfactoryStudents = assessedStudents.filter(
-    (student) =>
-      student.averagePercentage >= 80 &&
-      student.averagePercentage < 90,
-  );
-
-  const satisfactoryStudents = assessedStudents.filter(
-    (student) =>
-      student.averagePercentage >= 75 &&
-      student.averagePercentage < 80,
-  );
-
   const atRiskStudents = assessedStudents
     .filter(
       (student) =>
@@ -933,16 +940,6 @@ export default function Dashboard() {
         firstStudent.averagePercentage,
     );
 
-  const passingStudents = assessedStudents.filter(
-    (student) =>
-      student.averagePercentage >= gradingRules.passingGrade,
-  );
-
-  const passingRate =
-    assessedStudents.length > 0
-      ? (passingStudents.length / assessedStudents.length) * 100
-      : 0;
-
   const currentSectionLabel =
     selectedSection === "ALL"
       ? "All Sections"
@@ -957,11 +954,6 @@ export default function Dashboard() {
     selectedSubject === "ALL"
       ? "All Subjects"
       : currentSubject?.name || "Selected Subject";
-
-  const getPercentage = (count) =>
-    assessedStudents.length === 0
-      ? 0
-      : (count / assessedStudents.length) * 100;
 
   return (
     <div
@@ -1147,14 +1139,19 @@ export default function Dashboard() {
         }`}
       >
         <header className="px-5 pt-8 sm:px-8 lg:px-10">
-          <div className="mx-auto max-w-[1500px]">
-            <h1 className="text-4xl font-extrabold tracking-[-0.04em] text-[var(--ed-primary)] sm:text-5xl">
-              {pageDetails.title}
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ed-color-71808d)] sm:text-base">
-              {pageDetails.description}
-            </p>
-            <p className="mt-2 text-sm text-[var(--ed-muted)]">School year: {activeYearName}</p>
+          <div className={`mx-auto ${activeView === "dashboard" ? "dashboard-header-content max-w-[1480px]" : "max-w-[1500px]"}`}>
+            <div className={activeView === "dashboard" ? "dashboard-title-row" : undefined}>
+              <h1 className="text-4xl font-extrabold tracking-[-0.04em] text-[var(--ed-primary)] sm:text-5xl">
+                {pageDetails.title}
+              </h1>
+              {activeView === "dashboard" && <div ref={setFolderTabsHost} className="dashboard-header-tabs" />}
+            </div>
+            {activeView !== "dashboard" && (
+              <>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ed-color-71808d)] sm:text-base">{pageDetails.description}</p>
+                <p className="mt-2 text-sm text-[var(--ed-muted)]">School year: {activeYearName}</p>
+              </>
+            )}
           </div>
         </header>
 
@@ -1165,7 +1162,7 @@ export default function Dashboard() {
             </div>
           ) : (
             <Suspense fallback={<LoadingIndicator className="py-12" />}>
-            <div key={activeView} className="ed-view-enter">
+            <div key={activeView} className={activeView === "dashboard" ? undefined : "ed-view-enter"}>
               {activeView === "yearEnd" && (
                 <YearEndView onFinished={() => fetchDashboardData({ silent: true })} onOpenInsight={openSavedInsight} />
               )}
@@ -1179,38 +1176,35 @@ export default function Dashboard() {
               )}
 
               {activeView === "dashboard" && (
-                <DashboardView
-                  students={students}
-                  sections={sections}
-                  subjects={subjects}
-                  assessments={assessments}
-                  displayedAssessments={displayedAssessments}
-                  selectedSection={selectedSection}
-                  selectedSubject={selectedSubject}
-                  selectedTerm={selectedTerm}
-                  setSelectedSection={setSelectedSection}
-                  setSelectedSubject={setSelectedSubject}
-                  setSelectedTerm={setSelectedTerm}
-                  currentSectionLabel={currentSectionLabel}
-                  currentSubjectLabel={currentSubjectLabel}
-                  classAverage={classAverage}
-                  assessedStudents={assessedStudents}
-                  displayedStudents={displayedStudents}
-                  passingRate={passingRate}
-                  passingStudents={passingStudents}
-                  atRiskStudents={atRiskStudents}
-                  excellentStudents={excellentStudents}
-                  verySatisfactoryStudents={verySatisfactoryStudents}
-                  satisfactoryStudents={satisfactoryStudents}
-                  highPotentialStudents={highPotentialStudents}
-                  getPercentage={getPercentage}
-                  onEditAssessment={handleEditAssessment}
-                  handleDeleteAssessment={handleDeleteAssessment}
-                  generateStudentRecommendation={generateStudentRecommendation}
-                  generatingRecommendationKey={generatingRecommendationKey}
-                  gradingRules={gradingRules}
-                  openView={openView}
-                  handleAddAssessment={handleAddAssessment}
+                <TeachingDashboard
+                  activeData={dashboardData}
+                  description={pageDetails.description}
+                  folderTabsHost={folderTabsHost}
+                  onActiveReport={applyDashboardData}
+                  onAssessmentStatusChanged={updateAssessmentStatus}
+                  onNotify={showToast}
+                  onOpenLibrary={() => openView("assessments")}
+                  onGenerate={generateStudentRecommendation}
+                  generating={generatingRecommendationKey}
+                  onLoadStudentInsights={loadStudentInsights}
+                  renderStudentProfile={({ student, data, scores, year }) => (
+                    <div className="space-y-6">
+                      <SectionTitle title={student.name} description={`Grade ${student.grade} · Section ${student.section}${student.archived ? " · Archived enrollment" : ""}`} />
+                      <OfficialGradesTable gradeSummaries={data.gradeSummaries.filter((summary) => summary.student_id === student.id)} showPerformance />
+                      <AssessmentHistoryTable records={buildStudentAssessmentHistory(student, data.assessments, scores)} />
+                      <SavedInsightsPanel
+                        key={student.id}
+                        student={student}
+                        insights={studentInsightsById[student.id] ?? []}
+                        loading={loadingStudentInsightsId === student.id}
+                        error={studentInsightErrors[student.id] || ""}
+                        openSavedInsight={(insight) => openSavedInsight({ ...insight, reportingYear: year })}
+                        reload={() => loadStudentInsights(student.id, true, year)}
+                        onDelete={(insight) => handleDeleteInsight(student.id, insight.id, year)}
+                        onFinish={(insight) => handleFinishInsight({ ...insight, reportingYear: year })}
+                      />
+                    </div>
+                  )}
                 />
               )}
 
@@ -1289,21 +1283,23 @@ export default function Dashboard() {
 
               {activeView === "assessments" && (
                 <AssessmentsView
-                  students={students}
                   sections={sections}
                   subjects={subjects}
-                  assessments={assessments}
                   displayedAssessments={displayedAssessments}
                   selectedSection={selectedSection}
                   selectedSubject={selectedSubject}
                   selectedTerm={selectedTerm}
+                  selectedStatus={selectedAssessmentStatus}
                   setSelectedSection={setSelectedSection}
                   setSelectedSubject={setSelectedSubject}
                   setSelectedTerm={setSelectedTerm}
+                  setSelectedStatus={setSelectedAssessmentStatus}
+                  currentSectionLabel={currentSectionLabel}
                   currentSubjectLabel={currentSubjectLabel}
                   onAddAssessment={handleAddAssessment}
                   onEditAssessment={handleEditAssessment}
                   onDeleteAssessment={handleDeleteAssessment}
+                  onAssessmentStatusChanged={updateAssessmentStatus}
                 />
               )}
 
@@ -1357,20 +1353,23 @@ export default function Dashboard() {
         <Suspense fallback={null}><SystemTutorial userId={tutorialUserId} replayRequest={tutorialReplayRequest} /></Suspense>
       )}
 
-      <MacNotificationCenter toasts={toasts} onDismiss={dismissToast} />
+      <MacNotificationCenter toasts={toasts} onDismiss={dismissToast}
+        schedule={showScheduleReminder ? scheduledAssessments : null} onDismissSchedule={dismissScheduleReminder} />
     </div>
   );
 }
 
-function MacNotificationCenter({ toasts, onDismiss }) {
-  if (!toasts.length) {
+function MacNotificationCenter({ toasts, onDismiss, schedule, onDismissSchedule }) {
+  const notifications = schedule === null ? toasts : [{ id: "assessment-schedule", type: "schedule", title: "Scheduled assessments" }, ...toasts];
+  if (!notifications.length) {
     return null;
   }
 
   return (
     <div className="pointer-events-none fixed right-4 top-4 z-[120] flex w-[min(390px,calc(100vw-32px))] flex-col gap-2.5 sm:right-6 sm:top-6">
-      {toasts.map((toast) => {
+      {notifications.map((toast) => {
         const isError = toast.type === "error";
+        const isSchedule = toast.type === "schedule";
 
         return (
           <div
@@ -1393,276 +1392,45 @@ function MacNotificationCenter({ toasts, onDismiss }) {
                     <p className="text-sm font-semibold text-[var(--ed-color-25313c)]">
                       {toast.title || "EduLITE"}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-[var(--ed-color-8a98a5)]">
+                    {!isSchedule && <p className="mt-0.5 text-[11px] text-[var(--ed-color-8a98a5)]">
                       {isError ? "Action needs attention" : "Update completed"}
-                    </p>
+                    </p>}
                   </div>
 
                   <button
                     type="button"
-                    onClick={() => onDismiss(toast.id)}
+                    onClick={isSchedule ? onDismissSchedule : () => onDismiss(toast.id)}
                     className="flex h-7 w-7 !min-h-0 items-center justify-center rounded-full text-lg leading-none text-[var(--ed-color-8a98a5)] hover:bg-[var(--ed-color-eef2f5)] hover:text-[var(--ed-color-25313c)]"
-                    aria-label="Dismiss notification"
+                    aria-label={isSchedule ? "Dismiss scheduled assessments notification" : "Dismiss notification"}
                   >
                     ×
                   </button>
                 </div>
 
-                <p className="mt-2 text-sm leading-5 text-[var(--ed-color-52616d)]">
-                  {toast.message}
-                </p>
+                {isSchedule ? (
+                  <div className="mt-2 text-sm leading-5 text-[var(--ed-color-52616d)]" aria-live="polite">
+                    {schedule.length ? (
+                      <ul className="max-h-[min(40dvh,16rem)] space-y-2 overflow-y-auto pr-1">
+                        {schedule.map((assessment) => (
+                          <li key={assessment.id}>
+                            <p className="flex items-center gap-2 break-words font-semibold">
+                              <AssessmentStatusBadge status={assessment.status} date={assessment.date} />
+                              <span className="min-w-0">{assessment.name}</span>
+                            </p>
+                            <p className="mt-0.5 text-xs text-[var(--ed-muted)]">
+                              {[formatScheduledDate(assessment.date), assessment.subject_name].filter(Boolean).join(" · ")}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : <p>No scheduled assessments remain.</p>}
+                  </div>
+                ) : <p className="mt-2 text-sm leading-5 text-[var(--ed-color-52616d)]">{toast.message}</p>}
               </div>
             </div>
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function DashboardView({
-  students,
-  sections,
-  subjects,
-  assessments,
-  displayedAssessments,
-  selectedSection,
-  selectedSubject,
-  selectedTerm,
-  setSelectedSection,
-  setSelectedSubject,
-  setSelectedTerm,
-  currentSectionLabel,
-  currentSubjectLabel,
-  classAverage,
-  assessedStudents,
-  displayedStudents,
-  passingRate,
-  passingStudents,
-  atRiskStudents,
-  excellentStudents,
-  verySatisfactoryStudents,
-  satisfactoryStudents,
-  highPotentialStudents,
-  getPercentage,
-  onEditAssessment,
-  handleDeleteAssessment,
-  generateStudentRecommendation,
-  generatingRecommendationKey,
-  gradingRules = { passingGrade: 75, highPerformingGrade: 90 },
-  openView,
-  handleAddAssessment,
-}) {
-  const belowConnecting = assessedStudents.filter((student) => student.averagePercentage < 75);
-  const distribution = [
-    {
-      label: "Advancing",
-      count: excellentStudents.length,
-      percentage: getPercentage(excellentStudents.length),
-    },
-    {
-      label: "Benchmarking",
-      count: verySatisfactoryStudents.length,
-      percentage: getPercentage(verySatisfactoryStudents.length),
-    },
-    {
-      label: "Connecting",
-      count: satisfactoryStudents.length,
-      percentage: getPercentage(satisfactoryStudents.length),
-    },
-    {
-      label: "Developing / Emerging",
-      count: belowConnecting.length,
-      percentage: getPercentage(belowConnecting.length),
-    },
-  ];
-
-  const recentAssessments = [...displayedAssessments]
-    .sort((first, second) => String(second.date).localeCompare(String(first.date)))
-    .slice(0, 5);
-
-  return (
-    <div className="space-y-6">
-      <DashboardFilters
-        students={students}
-        sections={sections}
-        subjects={subjects}
-        assessments={assessments}
-        selectedSection={selectedSection}
-        selectedSubject={selectedSubject}
-        selectedTerm={selectedTerm}
-        setSelectedSection={setSelectedSection}
-        setSelectedSubject={setSelectedSubject}
-        setSelectedTerm={setSelectedTerm}
-      />
-
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MinimalMetric
-          label="Class Average"
-          value={classAverage.toFixed(1)}
-          detail={`${currentSectionLabel} · ${currentSubjectLabel} · Term ${selectedTerm}`}
-        />
-        <MinimalMetric
-          label="Passing Rate"
-          value={`${passingRate.toFixed(1)}%`}
-          detail={`${passingStudents.length} of ${assessedStudents.length} assessed learners`}
-        />
-        <MinimalMetric
-          label="Students Assessed"
-          value={assessedStudents.length}
-          detail={`${displayedStudents.length} students match the filters`}
-        />
-        <MinimalMetric
-          label="Needs Support"
-          value={atRiskStudents.length}
-          detail={`Below ${gradingRules.passingGrade} in Term ${selectedTerm}`}
-          attention={atRiskStudents.length > 0}
-        />
-      </section>
-
-      <p className="text-sm text-[var(--ed-color-71808d)]">
-        Learning support updates as scores are recorded. In-progress performance uses available assessments and component weights; unrecorded scores are excluded. Official term grades remain in Term Grades.
-      </p>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_.85fr]">
-        <section className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-6 sm:p-7">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <h2 className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)]">
-                Student Distribution
-              </h2>
-            </div>
-            <span className="text-sm text-[var(--ed-color-8a98a5)]">
-              {assessedStudents.length} assessed
-            </span>
-          </div>
-
-          <div className="mt-6 space-y-5">
-            {distribution.map((item) => (
-              <div key={item.label}>
-                <div className="mb-2 flex items-center gap-4">
-                  <p className="shrink-0 text-3xl font-extrabold tabular-nums text-[var(--ed-primary)]">{item.count}</p>
-                  <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-[var(--ed-color-52616d)]">{item.label}</h3>
-                  <p className="mt-1 text-xs text-[var(--ed-color-8a98a5)]">{item.percentage.toFixed(0)}% of assessed students</p>
-                  </div>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-[var(--ed-color-edf2f5)]">
-                  <div
-                    className="h-full rounded-full bg-[var(--ed-primary)]"
-                    style={{ width: `${item.percentage}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-6 sm:p-7">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <h2 className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)]">
-                Learning Support
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => openView("aiInsights")}
-              className="text-sm font-semibold text-[var(--ed-color-168cc8)] hover:text-[var(--ed-color-0f77aa)]"
-            >
-              View all
-            </button>
-          </div>
-
-          <div className="mt-6 space-y-3">
-            <PriorityStudent
-              label="Needs intervention"
-              student={atRiskStudents[0]}
-              term={selectedTerm}
-              supportType="intervention"
-              onGenerate={generateStudentRecommendation}
-              generatingKey={generatingRecommendationKey}
-            />
-            <PriorityStudent
-              label="Ready for enrichment"
-              student={highPotentialStudents[0]}
-              term={selectedTerm}
-              supportType="enrichment"
-              onGenerate={generateStudentRecommendation}
-              generatingKey={generatingRecommendationKey}
-            />
-          </div>
-        </section>
-      </div>
-
-      <section className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-6 sm:p-7">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)]">
-              Assessments
-            </h2>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => openView("assessments")}
-              className="rounded-[12px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-2.5 text-sm font-semibold text-[var(--ed-color-52616d)] hover:border-[var(--ed-primary)] hover:text-[var(--ed-color-168cc8)]"
-            >
-              View library
-            </button>
-            <button
-              type="button"
-              onClick={handleAddAssessment}
-              className="rounded-[12px] bg-[var(--ed-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--ed-primary-hover)]"
-            >
-              New assessment
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-5 divide-y divide-[var(--ed-color-eef2f5)]">
-          {recentAssessments.map((assessment) => (
-            <div
-              key={assessment.id}
-              className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="min-w-0">
-                <p className="truncate font-semibold text-[var(--ed-color-25313c)]">
-                  {assessment.name}
-                </p>
-                <p className="mt-1 text-sm text-[var(--ed-color-8a98a5)]">
-                  {assessment.subject_name} · {assessment.slot_label ?? assessment.category_label ?? assessment.type} · {assessment.date}
-                </p>
-              </div>
-              <div className="flex shrink-0 gap-3 text-sm font-semibold">
-                <button
-                  type="button"
-                  onClick={() => onEditAssessment(assessment.id)}
-                  className="text-[var(--ed-color-168cc8)] hover:text-[var(--ed-color-0f77aa)]"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteAssessment(assessment.id)}
-                  className="text-[var(--ed-color-d94141)] hover:text-[var(--ed-color-b82e2e)]"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-
-          {recentAssessments.length === 0 && (
-            <EmptyState
-              title="No assessments yet"
-              description="Create an assessment to begin recording student performance."
-              actionLabel="Create assessment"
-              onAction={handleAddAssessment}
-            />
-          )}
-        </div>
-      </section>
     </div>
   );
 }
@@ -1686,107 +1454,96 @@ function MinimalMetric({ label, value, detail, attention = false }) {
   );
 }
 
-function PriorityStudent({
-  label,
-  student,
-  term,
-  supportType,
-  onGenerate,
-  generatingKey,
-}) {
-  const requestKey = student ? `${supportType}-${student.id}` : "";
-  const isGenerating = generatingKey === requestKey;
-
-  return (
-    <div className="rounded-[18px] border border-[var(--ed-color-e7edf1)] bg-[var(--ed-color-f8fafb)] p-4">
-      {student ? (
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <p className="shrink-0 text-3xl font-extrabold tabular-nums text-[var(--ed-primary)]">{student.averagePercentage.toFixed(1)}</p>
-            <div className="min-w-0">
-            <h3 className="truncate font-semibold text-[var(--ed-color-25313c)]">{student.name}</h3>
-            <p className="mt-1 text-sm text-[var(--ed-color-71808d)]">
-              {label} · Term {term}
-              {student.isProvisional && " · In progress"}
-            </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => onGenerate(student, supportType)}
-            disabled={Boolean(generatingKey)}
-            className="shrink-0 rounded-[11px] bg-[var(--ed-primary)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--ed-primary-hover)] disabled:opacity-50"
-          >
-            {isGenerating ? <LoadingIndicator compact label="Generating..." /> : "Generate"}
-          </button>
-        </div>
-      ) : (
-        <div><h3 className="font-semibold">{label}</h3><p className="mt-2 text-sm text-[var(--ed-color-8a98a5)]">No student identified.</p></div>
-      )}
-    </div>
-  );
-}
-
 function AssessmentsView({
-  students,
   sections,
   subjects,
-  assessments,
   displayedAssessments,
   selectedSection,
   selectedSubject,
   selectedTerm,
+  selectedStatus,
   setSelectedSection,
   setSelectedSubject,
   setSelectedTerm,
+  setSelectedStatus,
+  currentSectionLabel,
   currentSubjectLabel,
   onAddAssessment,
   onEditAssessment,
   onDeleteAssessment,
+  onAssessmentStatusChanged,
 }) {
+  const today = todayAsInputValue();
+  const filteredAssessments = selectedStatus === "ALL" ? displayedAssessments : displayedAssessments.filter(
+    (assessment) => assessmentStatusIndicator(assessment.status, assessment.date === today) === selectedStatus,
+  );
+
   return (
-    <div className="space-y-6">
-      <section className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-6 sm:p-7">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex min-w-0 items-center gap-4">
-            <p className="shrink-0 text-5xl font-extrabold tabular-nums text-[var(--ed-primary)]">{displayedAssessments.length}</p>
-            <div className="min-w-0">
-            <h2 className="text-2xl font-bold text-[var(--ed-color-25313c)]">Assessment Library</h2>
-            <p className="mt-2 text-sm text-[var(--ed-muted)]">Assessments for {currentSubjectLabel} in Term {selectedTerm}.</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onAddAssessment}
-            className="rounded-[12px] bg-[var(--ed-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--ed-primary-hover)]"
-          >
-            Create assessment
-          </button>
+    <div className="dashboard-header-content space-y-6">
+      <div>
+        <div className="assessment-filter-row">
+          <AssessmentFilterTabs label="Assessment term" options={TERM_FILTER_OPTIONS}
+            selected={selectedTerm} onSelect={setSelectedTerm} />
+          <AssessmentFilterTabs label="Assessment section" className="assessment-scope-tabs"
+            options={[
+              { value: "ALL", label: "All Sections" },
+              ...sections.map(({ name }) => ({ value: name, label: name })),
+            ]}
+            selected={selectedSection} onSelect={setSelectedSection} />
         </div>
-      </section>
+        <section className="dashboard-folder-panel p-6 sm:p-7">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex min-w-0 items-center gap-4">
+              <p className="shrink-0 text-5xl font-extrabold tabular-nums text-[var(--ed-primary)]" aria-live="polite">{filteredAssessments.length}</p>
+              <div className="min-w-0">
+                <h2 className="text-2xl font-bold text-[var(--ed-color-25313c)]">Assessment Library</h2>
+                <p className="mt-2 text-sm text-[var(--ed-muted)]">{currentSectionLabel} · {currentSubjectLabel} · {termLabel(selectedTerm)}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onAddAssessment}
+              className="rounded-[12px] bg-[var(--ed-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--ed-primary-hover)]"
+            >
+              Create assessment
+            </button>
+          </div>
+        </section>
+      </div>
 
-      <DashboardFilters
-        students={students}
-        sections={sections}
-        subjects={subjects}
-        assessments={assessments}
-        selectedSection={selectedSection}
-        selectedSubject={selectedSubject}
-        selectedTerm={selectedTerm}
-        setSelectedSection={setSelectedSection}
-        setSelectedSubject={setSelectedSubject}
-        setSelectedTerm={setSelectedTerm}
-      />
-
-      <AssessmentList
-        sections={sections}
-        displayedAssessments={displayedAssessments}
-        currentSubjectLabel={currentSubjectLabel}
-        onEditAssessment={onEditAssessment}
-        handleDeleteAssessment={onDeleteAssessment}
-      />
+      <div>
+        <div className="assessment-filter-row justify-end">
+          <AssessmentFilterTabs label="Assessment subject" className="assessment-scope-tabs"
+            options={[
+              { value: "ALL", label: "All Subjects" },
+              ...subjects.map(({ id, name }) => ({ value: String(id), label: name })),
+            ]}
+            selected={selectedSubject} onSelect={setSelectedSubject} />
+          <AssessmentFilterTabs label="Assessment status" options={ASSESSMENT_STATUS_FILTERS}
+            selected={selectedStatus} onSelect={setSelectedStatus} />
+        </div>
+        <AssessmentList
+          sections={sections}
+          displayedAssessments={filteredAssessments}
+          currentSubjectLabel={currentSubjectLabel}
+          onEditAssessment={onEditAssessment}
+          handleDeleteAssessment={onDeleteAssessment}
+          onAssessmentStatusChanged={onAssessmentStatusChanged}
+        />
+      </div>
     </div>
   );
+}
+
+function AssessmentFilterTabs({ label, options, selected, onSelect, className = "" }) {
+  return <div className={`dashboard-folder-tabs ${className}`} role="group" aria-label={label}>
+    {options.map((option) => (
+      <button key={option.value} type="button" className="dashboard-folder-tab"
+        aria-pressed={option.value === selected} onClick={() => onSelect(option.value)}>
+        {option.label}
+      </button>
+    ))}
+  </div>;
 }
 
 function AiInsightsView({
@@ -2354,21 +2111,19 @@ function CurrentTermScores({
   );
 }
 
-function OfficialGradesTable({ gradeSummaries }) {
+function OfficialGradesTable({ gradeSummaries, showPerformance = false }) {
   return (
     <div>
       <SectionTitle
-        title="Three-Term Summary"
-        description="Assessment grades are transmuted per term. Imported term grades are already final grades. The final subject grade averages all three terms."
+        title={showPerformance ? "Subject & Term Results" : "Three-Term Summary"}
+        description={showPerformance ? "In-progress values use available scores. Imported and official grades are shown when available." : "Assessment grades are transmuted per term. Imported term grades are already final grades. The final subject grade averages all three terms."}
       />
       <div className="mt-5 minimal-scrollbar overflow-x-auto rounded-[18px] border border-[var(--ed-color-e3e9ee)]">
         <table className="w-full min-w-[760px]">
           <thead className="bg-[var(--ed-color-f8fafb)]">
             <tr className="border-b border-[var(--ed-color-e3e9ee)]">
               <TableHeading>Subject</TableHeading>
-              <TableHeading align="center">Term 1</TableHeading>
-              <TableHeading align="center">Term 2</TableHeading>
-              <TableHeading align="center">Term 3</TableHeading>
+              {TERM_NUMBERS.map((term) => <TableHeading key={term} align="center">{termLabel(term)}</TableHeading>)}
               <TableHeading align="center">Final</TableHeading>
               <TableHeading align="center">Descriptor</TableHeading>
             </tr>
@@ -2377,9 +2132,11 @@ function OfficialGradesTable({ gradeSummaries }) {
             {gradeSummaries.map((summary) => (
               <tr key={summary.subject_id}>
                 <td className="px-5 py-4 font-semibold text-[var(--ed-color-25313c)]">{summary.subject_name}</td>
-                <GradeCell value={summary.term1?.termGrade} source={summary.term1?.source} />
-                <GradeCell value={summary.term2?.termGrade} source={summary.term2?.source} />
-                <GradeCell value={summary.term3?.termGrade} source={summary.term3?.source} />
+                {TERM_NUMBERS.map((term) => {
+                  const result = summary[`term${term}`];
+                  return <GradeCell key={term} value={showPerformance ? getTermPerformanceGrade(result) : result?.termGrade}
+                    source={result?.source} inProgress={showPerformance && result?.performance?.isProvisional} />;
+                })}
                 <GradeCell value={summary.final?.finalGrade} accent />
                 <td className="px-5 py-4 text-center text-sm text-[var(--ed-color-71808d)]">
                   {summary.final?.descriptor ?? "—"}
@@ -2400,11 +2157,12 @@ function OfficialGradesTable({ gradeSummaries }) {
   );
 }
 
-function GradeCell({ value, accent = false, source }) {
+function GradeCell({ value, accent = false, source, inProgress }) {
   return (
     <td className={`px-5 py-4 text-center font-bold ${accent ? "text-[var(--ed-primary)]" : "text-[var(--ed-color-52616d)]"}`}>
       {value ?? "—"}
       {source === "imported" && <span className="mt-1 block text-[10px] font-normal text-[var(--ed-muted)]">Imported</span>}
+      {inProgress && <span className="mt-1 block text-[10px] font-normal text-[var(--ed-muted)]">In progress</span>}
     </td>
   );
 }
@@ -2539,7 +2297,11 @@ function DashboardFilters({
     <div className="flex justify-end">
       <FilterSidebar title="Filter results"
         activeCount={[selectedSection !== "ALL", selectedSubject !== "ALL", selectedTerm !== "1"].filter(Boolean).length}
-        onReset={() => { setSelectedSection("ALL"); setSelectedSubject("ALL"); setSelectedTerm("1"); }}>
+        onReset={() => {
+          setSelectedSection("ALL");
+          setSelectedSubject("ALL");
+          setSelectedTerm("1");
+        }}>
         <FilterSelect
           label="Section"
           value={selectedSection}
@@ -2562,11 +2324,7 @@ function DashboardFilters({
           label="Term"
           value={selectedTerm}
           onChange={setSelectedTerm}
-          options={[
-            { value: "1", label: "Term 1" },
-            { value: "2", label: "Term 2" },
-            { value: "3", label: "Term 3" },
-          ]}
+          options={TERM_FILTER_OPTIONS}
         />
       </FilterSidebar>
     </div>
@@ -2598,9 +2356,10 @@ function AssessmentList({
   currentSubjectLabel,
   onEditAssessment,
   handleDeleteAssessment,
+  onAssessmentStatusChanged,
 }) {
   return (
-    <section className="overflow-hidden rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)]">
+    <section className="dashboard-folder-panel overflow-hidden">
       <div className="border-b border-[var(--ed-color-eef2f5)] p-6">
         <h2 className="mt-2 text-2xl font-bold text-[var(--ed-color-25313c)]">{currentSubjectLabel}</h2>
       </div>
@@ -2620,7 +2379,7 @@ function AssessmentList({
             {displayedAssessments.map((assessment) => (
               <tr key={assessment.id} className="hover:bg-[var(--ed-color-fbfcfd)]">
                 <td className="px-5 py-4">
-                  <p className="font-semibold text-[var(--ed-color-25313c)]">{assessment.name}</p>
+                  <AssessmentStatusControl assessment={assessment} onSaved={onAssessmentStatusChanged} />
                   <p className="mt-1 text-xs text-[var(--ed-color-8a98a5)]">{assessment.date}</p>
                   <p className="mt-1 text-xs text-[var(--ed-color-8a98a5)]">{assessment.class_sections?.length ? assessment.class_sections.map((entry) => `Grade ${entry.grade} · ${sections.find((section) => section.id === entry.section_id)?.name ?? "Unavailable section"}`).join(", ") : "All enrolled sections"}</p>
                 </td>

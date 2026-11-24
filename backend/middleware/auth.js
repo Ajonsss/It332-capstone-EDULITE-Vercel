@@ -70,14 +70,16 @@ export async function requireAuth(
     }
 
     if ((payload.sessionVersion ?? 0) !== (user.sessionVersion ?? 0)) return res.status(401).json({ message: "Your session has been revoked. Please log in again." });
-    let schoolYearId = user.activeSchoolYearId ?? null;
-    let rules = { ...DEFAULT_RULES, ...user.legacyRules };
+    const schoolYearId = user.activeSchoolYearId ?? null;
+    const legacyRules = { ...DEFAULT_RULES, ...user.legacyRules };
+    let rules = legacyRules;
     if (schoolYearId) {
       const year = await SchoolYear.findOne({ _id: schoolYearId, ownerId: user._id }).lean();
       if (!year) return res.status(409).json({ message: "Your active school year is unavailable. Select another year in Settings." });
       rules = { ...DEFAULT_RULES, ...year.rules };
     }
     req.academicYear = schoolYearId;
+    req.legacyRules = legacyRules;
     req.rules = rules;
 
     req.user = {
@@ -108,6 +110,38 @@ export async function requireAuth(
       message:
         "Unable to authenticate the request.",
     });
+  }
+}
+
+// Opt-in scope for reporting and the actions launched from a report. Changing
+// this request's scope does not change the account's active school year.
+export async function selectAcademicYear(req, res, next) {
+  const requested = req.query?.school_year_id;
+  if (requested === undefined) return next();
+  if (requested !== "legacy" && !mongoose.isObjectIdOrHexString(requested)) {
+    return res.status(400).json({ message: "Select a valid school year." });
+  }
+
+  let schoolYearId = requested === "legacy" ? null : requested.toLowerCase();
+  const activeYearId = req.academicYear ?? null;
+  if (String(schoolYearId) === String(activeYearId)) return next();
+
+  try {
+    let rules = req.legacyRules;
+    if (schoolYearId !== null) {
+      const year = await SchoolYear.findOne({ _id: schoolYearId, ownerId: req.user.id }).lean();
+      if (!year) return res.status(404).json({ message: "School year not found." });
+      schoolYearId = year._id;
+      rules = { ...DEFAULT_RULES, ...year.rules };
+    }
+    req.activeAcademicYear = activeYearId;
+    req.academicYear = schoolYearId;
+    req.rules = rules ?? DEFAULT_RULES;
+    return academicContext.run({
+      ownerId: req.user.id, actorName: req.user.name, schoolYearId, rules: req.rules,
+    }, next);
+  } catch (error) {
+    return next(error);
   }
 }
 

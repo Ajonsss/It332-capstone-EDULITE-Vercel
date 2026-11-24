@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import academicPlugin from "./academicPlugin.js";
+import { ASSESSMENT_STATUSES } from "../../shared/assessmentStatus.mjs";
 
 /*
   ============================================================
@@ -226,6 +227,9 @@ const assessmentSchema =
         index:
           true,
       },
+
+      // Assessments saved before status tracking infer their status from recorded scores.
+      status: { type: String, enum: ASSESSMENT_STATUSES },
 
       /*
         Highest Possible Score (HPS).

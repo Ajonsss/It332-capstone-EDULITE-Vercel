@@ -1,0 +1,188 @@
+.dashboard-header-content {
+  container: dashboard-heading / inline-size;
+}
+
+.dashboard-title-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dashboard-header-tabs {
+  min-inline-size: 0;
+  margin-inline-start: auto;
+  margin-block-end: -1px;
+  position: relative;
+  z-index: 1;
+}
+
+.dashboard-header-tabs:empty {
+  display: none;
+}
+
+.edulite-content:has(.dashboard-header-tabs:not(:empty)) > main {
+  padding-block-start: 0;
+}
+
+.dashboard-folder-tabs {
+  --folder-curve: 7px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  padding-inline: var(--folder-curve);
+}
+
+.dashboard-header-tabs .dashboard-folder-tabs {
+  justify-content: safe flex-end;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-padding-inline: var(--folder-curve);
+}
+
+.edulite-shell .dashboard-folder-tab {
+  --folder-fill: var(--ed-hover);
+  position: relative;
+  min-inline-size: min-content;
+  min-block-size: 44px;
+  padding: 8px clamp(6px, 1.2cqi, 24px);
+  border: 1px solid var(--ed-border);
+  border-block-end: 0;
+  border-radius: 18px 18px 0 0;
+  background-color: var(--folder-fill);
+  color: var(--ed-secondary);
+  font-size: .875rem;
+  font-weight: 650;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.dashboard-folder-tab::before,
+.dashboard-folder-tab::after {
+  position: absolute;
+  inset-block-end: 0;
+  inline-size: var(--folder-curve);
+  block-size: var(--folder-curve);
+  background: radial-gradient(circle at 0 0,
+      transparent calc(var(--folder-curve) - 1px),
+      var(--ed-border) var(--folder-curve),
+      var(--folder-fill) calc(var(--folder-curve) + 1px));
+  pointer-events: none;
+  content: "";
+}
+
+.dashboard-folder-tab::before {
+  inset-inline-end: 100%;
+}
+
+.dashboard-folder-tab::after {
+  inset-inline-start: 100%;
+  transform: scaleX(-1);
+}
+
+.edulite-shell .dashboard-folder-tab:hover {
+  --folder-fill: var(--ed-accent-soft);
+}
+
+.edulite-shell .dashboard-folder-tab:is([aria-selected="true"], [aria-pressed="true"]) {
+  --folder-fill: var(--ed-surface);
+  z-index: 1;
+  color: var(--ed-text);
+  box-shadow: inset 0 3px var(--ed-primary);
+}
+
+.edulite-shell .dashboard-folder-tab:focus-visible {
+  z-index: 2;
+  outline: 2px solid var(--ed-accent-text);
+  outline-offset: -4px;
+}
+
+.dashboard-folder-panel {
+  min-inline-size: 0;
+  border: 1px solid var(--ed-border);
+  border-radius: 0 0 24px 24px;
+  background-color: var(--ed-surface);
+}
+
+.assessment-filter-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-block-end: -1px;
+}
+
+.assessment-filter-row > .dashboard-folder-tabs {
+  flex: none;
+  max-inline-size: 100%;
+  padding-block-start: 4px;
+}
+
+.assessment-filter-row > .assessment-scope-tabs {
+  flex: 0 1 auto;
+  min-inline-size: min(8rem, 100%);
+  justify-content: safe flex-end;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.edulite-shell .assessment-scope-tabs .dashboard-folder-tab {
+  flex: 0 0 auto;
+  min-inline-size: 0;
+  max-inline-size: min(14rem, 100%);
+  overflow-wrap: anywhere;
+}
+
+@container dashboard-heading (max-width: 560px) {
+  .assessment-filter-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .assessment-filter-row > :first-child {
+    position: relative;
+    z-index: 1;
+  }
+
+  .assessment-filter-row > .dashboard-folder-tabs + .dashboard-folder-tabs {
+    margin-block-start: -1px;
+    border: 1px solid var(--ed-border);
+    border-block-end: 0;
+    background-color: var(--ed-surface);
+  }
+
+  .edulite-shell .assessment-scope-tabs .dashboard-folder-tab {
+    flex-grow: 1;
+  }
+}
+
+@container dashboard-heading (max-width: 600px) {
+  .dashboard-title-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .dashboard-header-tabs {
+    inline-size: min(100%, 28rem);
+  }
+
+  .dashboard-folder-tabs {
+    --folder-curve: 5px;
+    gap: 2px;
+  }
+
+  .edulite-shell .dashboard-folder-tab {
+    flex: 1 1 auto;
+    padding-inline: 5px;
+    font-size: .75rem;
+  }
+}
+
+@container dashboard-heading (max-width: 340px) {
+  .edulite-shell .dashboard-folder-tab {
+    padding-inline: 2px;
+    font-size: .6875rem;
+  }
+}

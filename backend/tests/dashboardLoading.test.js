@@ -64,6 +64,53 @@ test("dashboard authenticates once, preserves owner/year scope and never caches 
   assert.deepEqual(await failed.json(), { message: "Students unavailable." });
 });
 
+test("dashboard reporting years are owner-scoped and use their own rules without changing the active year", async (t) => {
+  const previous = process.env.JWT_SECRET;
+  process.env.JWT_SECRET = "dashboard-school-year-test-secret";
+  t.after(() => { if (previous === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = previous; });
+
+  const id = () => new mongoose.Types.ObjectId();
+  const teacher = { _id: id(), activeSchoolYearId: id(), legacyRules: { passingGrade: 70 } };
+  const older = { _id: id(), ownerId: teacher._id, rules: { passingGrade: 81 } };
+  const years = [{ _id: teacher.activeSchoolYearId, ownerId: teacher._id, rules: { passingGrade: 76 } }, older,
+    { _id: id(), ownerId: id(), rules: { passingGrade: 90 } }];
+  t.mock.method(User, "findById", () => query(teacher));
+  t.mock.method(SchoolYear, "findOne", (filter) => query(years.find((year) =>
+    String(year._id) === String(filter._id) && String(year.ownerId) === String(filter.ownerId))));
+  t.mock.method(User, "updateOne", () => assert.fail("Reporting must not change the account's active year"));
+
+  let reads = 0;
+  const readers = { students: (req, res) => {
+    reads++;
+    const context = getAcademicContext();
+    assert.deepEqual(req.query, {}, "client IDs cannot widen the scope of the readers");
+    assert.equal(String(context.ownerId), String(teacher._id));
+    assert.equal(String(context.schoolYearId), String(req.academicYear));
+    assert.equal(context.rules.passingGrade, req.rules.passingGrade);
+    res.json({ year: req.academicYear, includeArchived: req.includeArchived });
+  } };
+  const app = express();
+  app.use(createDashboardRouter({ readers }));
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise((resolve) => { server.close(resolve); server.closeAllConnections(); }));
+  const token = jwt.sign({ sub: String(teacher._id) }, process.env.JWT_SECRET, { issuer: "edulite-api", audience: "edulite-frontend" });
+  const send = (query = "") => fetch(`http://127.0.0.1:${server.address().port}/dashboard${query}`, { headers: { Authorization: `Bearer ${token}` } });
+
+  const historic = await (await send(`?school_year_id=${older._id}`)).json();
+  assert.deepEqual(historic.students, { year: String(older._id), includeArchived: true });
+  assert.equal(historic.gradingRules.passingGrade, 81);
+  const legacy = await (await send("?school_year_id=legacy")).json();
+  assert.deepEqual(legacy.students, { year: null, includeArchived: true });
+  assert.equal(legacy.gradingRules.passingGrade, 70);
+  const active = await (await send()).json();
+  assert.deepEqual(active.students, { year: String(teacher.activeSchoolYearId), includeArchived: false });
+  assert.equal(active.gradingRules.passingGrade, 76);
+  assert.equal((await send(`?school_year_id=${years[2]._id}&student_id=${id()}`)).status, 404);
+  assert.equal((await send("?school_year_id=invalid")).status, 400);
+  assert.equal(reads, 3);
+});
+
 test("list counts use a fixed number of scoped queries rather than queries per card", async (t) => {
   const ownerId = new mongoose.Types.ObjectId(), section = new mongoose.Types.ObjectId(), subject = new mongoose.Types.ObjectId();
   const assessments = Array.from({ length: 40 }, (_, index) => ({ _id: new mongoose.Types.ObjectId(), name: `Quiz ${index}`, subjectId: { _id: subject, name: "Math" }, term: 1, category: "written_work", sequence: 1, totalItems: 10 }));

@@ -18,7 +18,7 @@ test("assessment form prompts for sections and limits score entry to selected gr
     { id: "older", name: "Older learner", grade: 8, section: "Rose", section_id: "rose", subject_ids: ["math"] },
   ];
   const classes = [{ grade: 9, section_id: "lily", subject_ids: ["math"] }];
-  const assessment = { name: "Fractions", budget_of_work: "Adding fractions", term: 1, category: "written_work", sequence: 1, date: "2026-10-23", total_items: 10, subject_id: "math", class_sections: [{ grade: 7, section_id: "rose" }], students: [{ ...students[0], score: 8 }] };
+  const assessment = { name: "Fractions", budget_of_work: "Adding fractions", term: 1, category: "written_work", sequence: 1, date: "2026-10-23", status: "scheduled", total_items: 10, subject_id: "math", class_sections: [{ grade: 7, section_id: "rose" }], students: [{ ...students[0], score: 8 }] };
   const writes = [], saved = [];
   const registeredAssessments = [];
   t.mock.method(axios, "get", async (url) => {
@@ -55,6 +55,8 @@ test("assessment form prompts for sections and limits score entry to selected gr
     assert.deepEqual(scoreNames(), []);
     assert.ok(group(7, "Rose")); assert.ok(group(7, "Lily")); assert.ok(group(8, "Rose")); assert.ok(group(9, "Lily"));
     assert.ok([...document.querySelectorAll('input[type="checkbox"]')].every((input) => !input.checked));
+    assert.equal(document.querySelector("#assessment-status").value, "not_conducted");
+    await change("#assessment-status", "scheduled");
     await change("#assessment-name", "Fractions"); await change("#assessment-budget-of-work", "Adding fractions"); await change("#assessment-total-items", "10");
     await click(button("Save Assessment"));
     assert.match(document.querySelector('[role="alert"]').textContent, /Choose at least one section/); assert.equal(writes.length, 0);
@@ -67,6 +69,7 @@ test("assessment form prompts for sections and limits score entry to selected gr
     await click(group(7, "Lily")); assert.equal(document.querySelector('[aria-label="Score for Bob"]').value, "0");
     await click(button("Save Assessment"));
     assert.equal(writes.at(-1).method, "post");
+    assert.equal(writes.at(-1).body.status, "scheduled");
     assert.deepEqual(writes.at(-1).body.class_sections, [{ grade: 7, section_id: "rose" }, { grade: 7, section_id: "lily" }]);
     assert.deepEqual(writes.at(-1).body.scores, [{ student_id: "alice", score: 8 }, { student_id: "bob", score: 0 }]);
     assert.equal(saved.length, 1);
@@ -87,10 +90,13 @@ test("assessment form prompts for sections and limits score entry to selected gr
   });
   await t.test("editing restores saved sections and scores while keeping other groups out of the roster", async () => {
     await render("existing");
+    assert.equal(document.querySelector("#assessment-status").value, "scheduled");
+    await change("#assessment-status", "done");
     assert.equal(group(7, "Rose").checked, true); assert.equal(group(7, "Lily").checked, false);
     assert.deepEqual(scoreNames(), ["Alice"]); assert.equal(document.querySelector('[aria-label="Score for Alice"]').value, "8");
     await click(group(7, "Lily")); await click(button("Update Assessment"));
     assert.equal(writes.at(-1).method, "put");
+    assert.equal(writes.at(-1).body.status, "done");
     assert.deepEqual(writes.at(-1).body.scores, [{ student_id: "alice", score: 8 }, { student_id: "bob", score: null }]);
   });
   await t.test("older subject-wide assessments remain editable until sections are explicitly chosen", async () => {

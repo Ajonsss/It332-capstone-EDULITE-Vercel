@@ -7,7 +7,7 @@ import { validateInterventionPlan } from "./utils/interventionPlan.js";
 import { attachInterventionBasis, buildInterventionSources } from "./utils/interventionBasis.js";
 import { generateStudentSupportPlan } from "./services/studentSupportGeneration.js";
 import { calculateTermPerformance } from "./utils/termPerformance.js";
-import { requireAuth } from "./middleware/auth.js";
+import { requireAuth, selectAcademicYear } from "./middleware/auth.js";
 
 import Student from "./models/Student.js";
 import Assessment from "./models/Assessment.js";
@@ -858,7 +858,7 @@ function formatSavedInsight(insight) {
 
 router.get(
   "/students/:studentId/insights",
-  requireAuth,
+  requireAuth, selectAcademicYear,
   async (req, res) => {
     if (!isValidId(req.params.studentId)) {
       return res.status(400).json({
@@ -869,10 +869,12 @@ router.get(
     try {
       const ownerId = req.user.id;
 
-      const studentExists = await Student.exists({
+      const enrollment = Student.exists({
         _id: req.params.studentId,
         ownerId,
       });
+      if (req.activeAcademicYear !== undefined) enrollment.setOptions({ includeArchived: true });
+      const studentExists = await enrollment;
 
       if (!studentExists) {
         return res.status(404).json({
@@ -909,7 +911,7 @@ router.get(
 // FINISH OR DELETE SAVED INSIGHTS
 // ===================================
 
-router.patch("/gemini/insights/:insightId/finish", requireAuth, async (req, res) => {
+router.patch("/gemini/insights/:insightId/finish", requireAuth, selectAcademicYear, async (req, res) => {
   if (!isValidId(req.params.insightId)) return res.status(400).json({ message: "A valid insight ID is required." });
   const filter = { _id: req.params.insightId, ownerId: req.user.id, schoolYearId: req.academicYear ?? null, supportType: "intervention" };
   try {
@@ -924,7 +926,7 @@ router.patch("/gemini/insights/:insightId/finish", requireAuth, async (req, res)
   }
 });
 
-router.delete("/gemini/insights/:insightId", requireAuth, async (req, res) => {
+router.delete("/gemini/insights/:insightId", requireAuth, selectAcademicYear, async (req, res) => {
   if (!isValidId(req.params.insightId)) return res.status(400).json({ message: "A valid insight ID is required." });
   try {
     const result = await StudentAiInsight.deleteOne({ _id: req.params.insightId, ownerId: req.user.id, schoolYearId: req.academicYear ?? null });
@@ -1029,7 +1031,7 @@ router.get(
 
 router.post(
   "/gemini/student-support/:studentId",
-  requireAuth,
+  requireAuth, selectAcademicYear,
   async (req, res) => {
     try {
       if (!process.env.GEMINI_API_KEY) {

@@ -54,6 +54,7 @@ function formatStudent(student) {
     id: student._id.toString(),
     name: student.name,
     grade: student.grade,
+    ...(student.archived ? { archived: true } : {}),
 
     section:
       student.sectionId?.name ??
@@ -259,8 +260,10 @@ export async function listStudents(req, res) {
           subject._id;
       }
 
+      const studentsQuery = Student.find(filter);
+      if (req.includeArchived) studentsQuery.setOptions({ includeArchived: true });
       const students =
-        await Student.find(filter)
+        await studentsQuery
           .populate({
             path: "sectionId",
             select: "name",

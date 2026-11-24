@@ -1,5 +1,5 @@
 import express from "express";
-import { requireAuth } from "./middleware/auth.js";
+import { requireAuth, selectAcademicYear } from "./middleware/auth.js";
 import { listStudents } from "./student.js";
 import { listSections } from "./section.js";
 import { listSubjects } from "./subject.js";
@@ -28,10 +28,13 @@ const defaultReaders = { students: listStudents, sections: listSections, subject
 
 export function createDashboardRouter({ auth = requireAuth, readers = defaultReaders } = {}) {
   const router = express.Router();
-  router.get("/dashboard", auth, async (req, res) => {
+  router.get("/dashboard", auth, selectAcademicYear, async (req, res) => {
     res.set("Cache-Control", "private, no-store");
     try {
-      const readRequest = { user: req.user, academicYear: req.academicYear, rules: req.rules, query: {}, params: {} };
+      const readRequest = {
+        user: req.user, academicYear: req.academicYear, activeAcademicYear: req.activeAcademicYear,
+        includeArchived: req.activeAcademicYear !== undefined, rules: req.rules, query: {}, params: {},
+      };
       const entries = await Promise.all(Object.entries(readers).map(async ([key, handler]) => [key, await readJson(handler, readRequest)]));
       return res.json({ ...Object.fromEntries(entries), gradingRules: req.rules });
     } catch (error) {

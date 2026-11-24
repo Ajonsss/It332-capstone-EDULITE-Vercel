@@ -1,7 +1,7 @@
 import { PERFORMANCE_LEVELS } from "../utils/performance";
 
 export default function RecordPerformanceSummary({ counts, total, shown, level, onLevelChange, context, disabled = false }) {
-  const cards = [{ label: "All students", value: "ALL", count: total, dotClass: "bg-[var(--ed-primary)]", range: "All performance levels" },
+  const cards = [{ label: "All students", value: "ALL", count: total, color: "var(--ed-primary)", range: "All performance levels" },
     ...PERFORMANCE_LEVELS.map((item) => ({ ...item, value: item.label, count: counts[item.label] ?? 0 }))];
   return (
     <section aria-label="Student performance overview" className="rounded-[24px] border border-[var(--ed-color-e3e9ee)] bg-[var(--ed-surface)] p-5 sm:p-6">
@@ -23,7 +23,7 @@ export default function RecordPerformanceSummary({ counts, total, shown, level, 
             <span className="shrink-0 text-4xl font-extrabold tabular-nums text-[var(--ed-color-25313c)]">{card.count}</span>
             <span className="min-w-0">
             <span className="flex items-center gap-1.5 text-sm font-semibold text-[var(--ed-color-52616d)]">
-              <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${card.dotClass}`} />
+              <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: card.color }} />
               {card.label}
             </span>
             <span className="mt-1 block text-xs leading-5 text-[var(--ed-muted)]">{card.range}</span>

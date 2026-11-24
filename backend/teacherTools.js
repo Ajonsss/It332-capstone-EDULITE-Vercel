@@ -32,7 +32,7 @@ const safeRules = (input) => Object.fromEntries(Object.keys(DEFAULT_RULES).map((
 const fail = (res, error, message) => { console.error(message, error); return res.status(500).json({ message }); };
 export async function listSchoolYears(req, res) {
   const years = await SchoolYear.find({ ownerId: req.user.id }).sort({ createdAt: -1 }).lean();
-  res.json({ activeId: req.academicYear, years: [{ _id: null, name: "Legacy / unassigned records" }, ...years] });
+  res.json({ activeId: req.activeAcademicYear === undefined ? req.academicYear : req.activeAcademicYear, years: [{ _id: null, name: "Legacy / unassigned records" }, ...years] });
 }
 router.get("/school-years", listSchoolYears);
 router.post("/school-years", async (req, res) => {

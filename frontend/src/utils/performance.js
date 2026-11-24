@@ -1,10 +1,10 @@
 export const PERFORMANCE_LEVELS = Object.freeze([
-  { label: "Advancing", minimum: 90, range: "90 and above", dotClass: "bg-[#34C759]", className: "border-[#34C759] bg-[#34C759] text-white" },
-  { label: "Benchmarking", minimum: 80, range: "80 to below 90", dotClass: "bg-[#007AFF]", className: "border-[#007AFF] bg-[#007AFF] text-white" },
-  { label: "Connecting", minimum: 75, range: "75 to below 80", dotClass: "bg-[#FFCC00]", className: "border-[#FFCC00] bg-[#FFCC00] text-[#1C1C1E]" },
-  { label: "Developing", minimum: 65, range: "65 to below 75", dotClass: "bg-[#FF9500]", className: "border-[#FF9500] bg-[#FF9500] text-white" },
-  { label: "Emerging", minimum: -Infinity, range: "Below 65", dotClass: "bg-[#FF3B30]", className: "border-[#FF3B30] bg-[#FF3B30] text-white" },
-  { label: "Incomplete", minimum: null, range: "No recorded performance yet", dotClass: "bg-[#8E8E93]", className: "border-[#8E8E93] bg-[#8E8E93] text-white" },
+  { label: "Advancing", minimum: 90, range: "90 and above", color: "#34C759", className: "border-[#34C759] bg-[#34C759] text-white" },
+  { label: "Benchmarking", minimum: 80, range: "80 to below 90", color: "#007AFF", className: "border-[#007AFF] bg-[#007AFF] text-white" },
+  { label: "Connecting", minimum: 75, range: "75 to below 80", color: "#FFCC00", className: "border-[#FFCC00] bg-[#FFCC00] text-[#1C1C1E]" },
+  { label: "Developing", minimum: 65, range: "65 to below 75", color: "#FF9500", className: "border-[#FF9500] bg-[#FF9500] text-white" },
+  { label: "Emerging", minimum: -Infinity, range: "Below 65", color: "#FF3B30", className: "border-[#FF3B30] bg-[#FF3B30] text-white" },
+  { label: "Incomplete", minimum: null, range: "No recorded performance yet", color: "#8E8E93", className: "border-[#8E8E93] bg-[#8E8E93] text-white" },
 ]);
 
 export function hasPerformanceGrade(grade) {

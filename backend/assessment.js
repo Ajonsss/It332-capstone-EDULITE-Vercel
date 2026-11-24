@@ -18,9 +18,10 @@ import {
 import { calculateTermPerformance } from "./utils/termPerformance.js";
 import { validateAssessmentSections } from "./utils/assessmentSections.js";
 import { assessmentIncludesStudent, assessmentStudentFilter, assessmentOverlapFilter } from "../shared/assessmentScope.mjs";
+import { ASSESSMENT_STATUS, ASSESSMENT_STATUSES } from "../shared/assessmentStatus.mjs";
 
 import {
-  requireAuth,
+  requireAuth, selectAcademicYear,
 } from "./middleware/auth.js";
 
 const router = express.Router();
@@ -209,6 +210,10 @@ async function validateAssessment(
 ) {
   const budgetError = validateInput(body.budget_of_work, { kind: "budgetOfWork", label: "Budget of Work", required: false });
   if (budgetError) return { error: budgetError };
+
+  if (body.status !== undefined && !ASSESSMENT_STATUSES.includes(body.status)) {
+    return { error: "Select a valid assessment status." };
+  }
 
   const name =
     normalizeText(body.name);
@@ -409,6 +414,7 @@ async function validateAssessment(
     value: {
       classSections,
       ...(body.budget_of_work !== undefined ? { budgetOfWork: (body.budget_of_work ?? "").trim() } : {}),
+      ...(body.status !== undefined ? { status: body.status } : {}),
       name,
 
       term,
@@ -688,6 +694,7 @@ function formatAssessment(
       ),
 
     budget_of_work: assessment.budgetOfWork ?? "",
+    status: assessment.status ?? (scoreCount > 0 ? ASSESSMENT_STATUS.DONE : ASSESSMENT_STATUS.NOT_CONDUCTED),
     class_sections: assessment.classSections?.map((entry) => ({ grade: entry.grade, section_id: String(entry.sectionId) })) ?? null,
 
     total_items:
@@ -745,6 +752,7 @@ export async function listAssessmentRecords(req, res) {
 
             select:
               "name grade sectionId",
+            options: { includeArchived: Boolean(req.includeArchived) },
 
             populate: {
               path:
@@ -999,11 +1007,10 @@ export async function listGradeSummaries(req, res) {
           });
       }
 
+      const enrollmentQuery = Student.find({ ownerId });
+      if (req.includeArchived) enrollmentQuery.setOptions({ includeArchived: true });
       const studentsQuery =
-        Student
-          .find({
-            ownerId,
-          })
+        enrollmentQuery
           .populate({
             path:
               "sectionId",
@@ -1414,6 +1421,26 @@ export async function listAssessments(req, res) {
 
 router.get("/assessments", requireAuth, listAssessments);
 
+router.patch("/assessments/:id/status", requireAuth, selectAcademicYear, async (req, res) => {
+  const { id } = req.params;
+  const status = req.body?.status;
+  if (!isValidObjectId(id)) return res.status(404).json({ message: "Assessment not found." });
+  if (!ASSESSMENT_STATUSES.includes(status)) return res.status(400).json({ message: "Select a valid assessment status." });
+
+  try {
+    const assessment = await Assessment.findOneAndUpdate(
+      { _id: id, ownerId: req.user.id, schoolYearId: req.academicYear ?? null },
+      { $set: { status } },
+      { new: true, runValidators: true, projection: { status: 1 } },
+    );
+    if (!assessment) return res.status(404).json({ message: "Assessment not found." });
+    return res.json({ id, status: assessment.status });
+  } catch (error) {
+    console.error("Unable to update assessment status:", error);
+    return res.status(500).json({ message: "Unable to update assessment status." });
+  }
+});
+
 /*
   ============================================================
   GET ONE ASSESSMENT
@@ -1423,7 +1450,7 @@ router.get("/assessments", requireAuth, listAssessments);
 router.get(
   "/assessments/:id",
 
-  requireAuth,
+  requireAuth, selectAcademicYear,
 
   async (req, res) => {
     const assessmentId =
@@ -1610,7 +1637,7 @@ router.get(
 router.post(
   "/assessments",
 
-  requireAuth,
+  requireAuth, selectAcademicYear,
 
   async (req, res) => {
     try {
@@ -1814,7 +1841,7 @@ router.post(
 router.put(
   "/assessments/:id",
 
-  requireAuth,
+  requireAuth, selectAcademicYear,
 
   async (req, res) => {
     const assessmentId =
@@ -2287,7 +2314,7 @@ router.put(
 router.delete(
   "/assessments/:id",
 
-  requireAuth,
+  requireAuth, selectAcademicYear,
 
   async (req, res) => {
     const assessmentId =

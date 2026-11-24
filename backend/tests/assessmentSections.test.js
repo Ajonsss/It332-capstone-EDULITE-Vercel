@@ -79,7 +79,10 @@ test("assessment creation, edits, scores, summaries and archives enforce selecte
   let counter = 32;
   const createId = () => (counter++).toString(16).padStart(24, "0");
   t.mock.method(Assessment, "create", async (rows) => rows.map((entry) => { const row = { ...entry, _id: createId(), schoolYearId: yearId }; state.assessments.push(row); return row; }));
-  t.mock.method(Assessment, "findOneAndUpdate", async (filter, update) => { const row = state.assessments.find((entry) => matches(entry, filter)); Object.assign(row, update.$set); return row; });
+  t.mock.method(Assessment, "findOneAndUpdate", async (filter, update) => {
+    const row = state.assessments.find((entry) => matches(entry, filter));
+    return row ? Object.assign(row, update.$set) : null;
+  });
   t.mock.method(AssessmentScore, "insertMany", async (rows) => { state.scores.push(...rows.map((row) => ({ ...row, _id: createId() }))); });
   t.mock.method(AssessmentScore, "deleteMany", async (filter) => { state.scores = state.scores.filter((row) => !matches(row, filter)); });
   t.mock.method(AssessmentScore, "countDocuments", async (filter) => state.scores.filter((row) => matches(row, filter)).length);
@@ -103,7 +106,7 @@ test("assessment creation, edits, scores, summaries and archives enforce selecte
   }
   const first = await request("/assessments", payload);
   assert.equal(first.status, 201, JSON.stringify(first.body));
-  const lily = await request("/assessments", { ...payload, class_sections: [section(7, lilyId)], scores: [{ student_id: bobId, score: 9 }] });
+  const lily = await request("/assessments", { ...payload, class_sections: [section(7, lilyId)], scores: [{ student_id: bobId, score: 9 }], status: "scheduled" });
   assert.equal(lily.status, 201, "different sections can use the same ECR slot");
   assert.equal((await request("/assessments", payload)).status, 400, "overlapping slots are rejected");
   assert.equal((await request("/assessments", { ...payload, class_sections: [section(8, roseId)], scores: [] })).status, 201, "shared section names in different grades have separate slots");
@@ -112,13 +115,32 @@ test("assessment creation, edits, scores, summaries and archives enforce selecte
   const multi = await request("/assessments", { ...payload, sequence: 2, class_sections: [section(7, roseId), section(7, lilyId), section(7, roseId)], scores: [{ student_id: aliceId, score: 0 }, { student_id: bobId, score: null }] });
   assert.equal(multi.status, 201, JSON.stringify(multi.body));
   const read = await request(`/assessments/${first.body.id}`, null, "GET");
+  assert.equal(read.body.status, "done", "an older assessment with scores has already been conducted");
   assert.deepEqual(read.body.class_sections, [section(7, roseId)]);
   assert.deepEqual(read.body.students.map((row) => row.id), [aliceId]);
+  const schedule = await request(`/assessments/${lily.body.id}`, null, "GET");
+  assert.equal(schedule.body.status, "scheduled");
+  assert.equal((await request("/assessments", { ...payload, status: "invalid" })).status, 400);
+  const statusPath = `/assessments/${lily.body.id}/status`;
+  assert.equal((await request(statusPath, { status: "invalid" }, "PATCH")).status, 400);
+  const scoresBefore = structuredClone(state.scores);
+  assert.deepEqual(await request(statusPath, { status: "done" }, "PATCH"), {
+    status: 200, body: { id: lily.body.id, status: "done" },
+  });
+  assert.deepEqual(state.scores, scoresBefore, "updating status leaves recorded scores intact");
+  const foreignAssessment = { ...state.assessments[0], _id: createId(), ownerId: foreignId };
+  const otherYearAssessment = { ...state.assessments[0], _id: createId(), schoolYearId: foreignId };
+  state.assessments.push(foreignAssessment, otherYearAssessment);
+  for (const assessment of [foreignAssessment, otherYearAssessment]) {
+    assert.equal((await request(`/assessments/${assessment._id}/status`, { status: "done" }, "PATCH")).status, 404);
+  }
+  state.assessments.splice(-2);
   assert.equal((await request(`/assessments/${first.body.id}/scores/${bobId}`, { score: 5 }, "PUT")).status, 400);
   assert.equal((await request(`/students/${bobId}/assessment-scores`, { scores: [{ assessment_id: first.body.id, score: 5 }] }, "PUT")).status, 400);
   assert.equal((await request(`/assessments/${first.body.id}`, { ...payload, class_sections: [section(7, lilyId)] }, "PUT")).status, 400, "changing sections cannot overwrite another section's slot");
-  const edited = await request(`/assessments/${first.body.id}`, { ...payload, class_sections: undefined, scores: [{ student_id: aliceId, score: 4 }] }, "PUT");
+  const edited = await request(`/assessments/${first.body.id}`, { ...payload, class_sections: undefined, status: "not_conducted", scores: [{ student_id: aliceId, score: 4 }] }, "PUT");
   assert.equal(edited.status, 200, JSON.stringify(edited.body));
+  assert.equal((await request(`/assessments/${first.body.id}`, null, "GET")).body.status, "not_conducted");
   assert.deepEqual(state.assessments.find((row) => row._id === first.body.id).classSections, [{ grade: 7, sectionId: roseId }], "omitted scope on edits retains the original selection");
   const summaries = await request("/grade-summaries", null, "GET");
   assert.equal(summaries.status, 200);

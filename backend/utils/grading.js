@@ -1,4 +1,6 @@
 import { currentRules } from "../services/academicContext.js";
+import { TERM_NUMBERS } from "../../shared/academicTerms.mjs";
+export { TERM_NUMBERS };
 /*
   ============================================================
   EduLITE 3-Term Grading Engine
@@ -103,13 +105,6 @@ import { currentRules } from "../services/academicContext.js";
   TERMS
   ============================================================
 */
-
-export const TERM_NUMBERS = Object.freeze([
-  1,
-  2,
-  3,
-]);
-
 
 /*
   ============================================================

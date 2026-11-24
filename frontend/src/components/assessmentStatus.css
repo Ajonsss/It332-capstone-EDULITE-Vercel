@@ -1,0 +1,163 @@
+[data-assessment-indicator] {
+  --status-text: var(--ed-secondary);
+  --status-surface: var(--ed-subtle);
+  --status-border: var(--ed-border);
+}
+
+[data-assessment-indicator="scheduled"] {
+  --status-text: #075985;
+  --status-surface: #e0f2fe;
+  --status-border: #bae6fd;
+}
+
+[data-assessment-indicator="today"] {
+  --status-text: var(--ed-warning);
+  --status-surface: var(--ed-warning-soft);
+  --status-border: var(--ed-warning-border);
+}
+
+[data-assessment-indicator="done"] {
+  --status-text: #166534;
+  --status-surface: #dcfce7;
+  --status-border: #bbf7d0;
+}
+
+:root:is([data-theme="dark"], [data-theme="amoled"]) [data-assessment-indicator="scheduled"] {
+  --status-text: #bae6fd;
+  --status-surface: #102f46;
+  --status-border: #245479;
+}
+
+:root:is([data-theme="dark"], [data-theme="amoled"]) [data-assessment-indicator="done"] {
+  --status-text: #bbf7d0;
+  --status-surface: #123222;
+  --status-border: #29623c;
+}
+
+.assessment-status-field {
+  position: relative;
+}
+
+.assessment-status-select {
+  border-color: var(--status-border);
+  background-color: var(--status-surface);
+  color: var(--status-text);
+  padding-inline-start: 2rem;
+}
+
+.assessment-status-dot {
+  display: inline-block;
+  flex: none;
+  width: .625rem;
+  height: .625rem;
+  border-radius: 50%;
+  background-color: var(--status-text);
+}
+
+.assessment-status-badge {
+  display: inline-flex;
+  flex: none;
+  min-block-size: 1.75rem;
+  align-items: center;
+  gap: .4rem;
+  padding: .15rem .5rem;
+  border: 1px solid var(--status-border);
+  border-radius: 999px;
+  background-color: var(--status-surface);
+  color: var(--status-text);
+  font-size: .6875rem;
+  font-weight: 650;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.assessment-status-quick {
+  position: relative;
+}
+
+.assessment-status-quick:hover {
+  border-color: var(--status-text);
+}
+
+.assessment-status-quick:focus-within {
+  outline: 2px solid var(--status-text);
+  outline-offset: 1px;
+}
+
+.assessment-status-quick-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.assessment-status-quick-select:disabled {
+  cursor: wait;
+}
+
+.assessment-status-marker {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: .875rem;
+  height: .875rem;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  color: var(--status-text);
+}
+
+.assessment-status-field > .assessment-status-marker {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 50%;
+  inset-inline-start: .625rem;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+[data-assessment-indicator="scheduled"] .assessment-status-marker {
+  border-radius: 3px;
+}
+
+[data-assessment-indicator="scheduled"] .assessment-status-marker::before {
+  position: absolute;
+  inset: 3px 0 auto;
+  border-block-start: 1px solid;
+  content: "";
+}
+
+[data-assessment-indicator="scheduled"] .assessment-status-marker::after {
+  position: absolute;
+  inset-block-start: -3px;
+  inset-inline-start: 2px;
+  width: 1px;
+  height: 4px;
+  background: currentColor;
+  box-shadow: 5px 0 currentColor;
+  content: "";
+}
+
+[data-assessment-indicator="today"] .assessment-status-marker::after {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-start: 5px;
+  width: 4px;
+  height: 4px;
+  border-inline-start: 1px solid;
+  border-block-end: 1px solid;
+  content: "";
+}
+
+[data-assessment-indicator="done"] .assessment-status-marker::after {
+  position: absolute;
+  inset-block-start: 1px;
+  inset-inline-start: 4px;
+  width: 4px;
+  height: 7px;
+  transform: rotate(45deg);
+  border-inline-end: 1.5px solid;
+  border-block-end: 1.5px solid;
+  content: "";
+}

@@ -5,15 +5,18 @@ import ValidatedInput from "./ValidatedInput";
 import LoadingIndicator from "./LoadingIndicator";
 import { parseWholeNumber, validateInput } from "../../../shared/inputValidation.mjs";
 
-import { API_URL } from "../utils/api.js";
+import { API_URL, schoolYearRequest } from "../utils/api.js";
+import { TERM_NUMBERS } from "../../../shared/academicTerms.mjs";
+import { ASSESSMENT_STATUS } from "../../../shared/assessmentStatus.mjs";
 import { usePageTitle } from "../utils/usePageTitle.js";
 import { buildClassHierarchy } from "../utils/classHierarchy.js";
+import { todayAsInputValue } from "../utils/assessmentSchedule.js";
 import { assessmentIncludesStudent } from "../../../shared/assessmentScope.mjs";
+import { AssessmentStatusSelect } from "./AssessmentStatusControl";
 
 const APPLE_FONT =
   '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
 
-const TERM_OPTIONS = [1, 2, 3];
 
 const CATEGORY_OPTIONS = [
   {
@@ -46,15 +49,6 @@ const CATEGORY_OPTIONS = [
   },
 ];
 
-function todayAsInputValue() {
-  const now = new Date();
-  const timezoneOffset = now.getTimezoneOffset() * 60_000;
-
-  return new Date(now.getTime() - timezoneOffset)
-    .toISOString()
-    .slice(0, 10);
-}
-
 function emptyAssessmentForm() {
   return {
     name: "",
@@ -63,6 +57,7 @@ function emptyAssessmentForm() {
     category: "written_work",
     sequence: "1",
     date: todayAsInputValue(),
+    status: ASSESSMENT_STATUS.NOT_CONDUCTED,
     total_items: "",
     subject_id: "",
     class_sections: [],
@@ -93,6 +88,12 @@ function getSlotLabel(category, sequence) {
 export default function AssessmentForm({
   embedded = false,
   assessmentId = null,
+  schoolYearId,
+  dashboardData,
+  initialTerm,
+  initialSubjectId,
+  initialGrade,
+  initialSectionId,
   onCancel,
   onSaved,
 } = {}) {
@@ -165,27 +166,28 @@ export default function AssessmentForm({
       setExistingAssessments([]);
 
       try {
-        const [subjectResponse, ruleResponse, studentResponse, sectionResponse, classResponse, assessmentListResponse] = await Promise.all([
-          axios.get(`${API_URL}/subjects`), axios.get(`${API_URL}/grading-rules`), axios.get(`${API_URL}/students`),
-          axios.get(`${API_URL}/sections`), axios.get(`${API_URL}/classes`),
-          axios.get(`${API_URL}/assessments`),
-        ]);
-        if (!cancelled) setGradingRules(ruleResponse.data);
+        const keys = ["subjects", "grading-rules", "students", "sections", "classes", "assessments"];
+        const data = dashboardData ?? Object.fromEntries(await Promise.all(keys.map(async (key) => {
+          const response = await axios.get(`${API_URL}/${key}`);
+          return [key, response.data];
+        })));
 
         if (cancelled) {
           return;
         }
 
-        const loadedSubjects = subjectResponse.data ?? [];
+        const loadedSubjects = data.subjects ?? [];
         setSubjects(loadedSubjects);
-        setEnrolledStudents(studentResponse.data ?? []);
-        setSections(sectionResponse.data ?? []);
-        setClasses(classResponse.data ?? []);
-        setExistingAssessments(assessmentListResponse.data ?? []);
+        setGradingRules(data.gradingRules ?? data["grading-rules"]);
+        setEnrolledStudents((data.students ?? []).filter((student) => !student.archived));
+        setSections(data.sections ?? []);
+        setClasses(data.classes ?? []);
+        setExistingAssessments(data.assessments ?? []);
 
         if (isEditing) {
           const assessmentResponse = await axios.get(
             `${API_URL}/assessments/${resolvedAssessmentId}`,
+            schoolYearRequest(schoolYearId),
           );
 
           if (cancelled) {
@@ -218,6 +220,8 @@ export default function AssessmentForm({
             date:
               assessment.date ?? todayAsInputValue(),
 
+            status: assessment.status ?? ASSESSMENT_STATUS.NOT_CONDUCTED,
+
             total_items: String(
               assessment.total_items ?? "",
             ),
@@ -237,13 +241,11 @@ export default function AssessmentForm({
             ),
           );
         } else {
-          const firstSubjectId = loadedSubjects[0]?.id;
-
           setFormData((current) => ({
             ...current,
-            subject_id: firstSubjectId
-              ? String(firstSubjectId)
-              : "",
+            term: initialTerm ?? current.term,
+            subject_id: String(initialSubjectId ?? loadedSubjects[0]?.id ?? ""),
+            class_sections: initialSectionId ? [{ grade: initialGrade, section_id: initialSectionId }] : current.class_sections,
           }));
         }
       } catch (requestError) {
@@ -265,7 +267,7 @@ export default function AssessmentForm({
     return () => {
       cancelled = true;
     };
-  }, [resolvedAssessmentId, isEditing, navigate]);
+  }, [resolvedAssessmentId, isEditing, navigate, schoolYearId, dashboardData, initialTerm, initialSubjectId, initialGrade, initialSectionId]);
 
   const handleSubjectChange = (value) => {
     setFormData((current) => ({
@@ -407,6 +409,7 @@ export default function AssessmentForm({
       category: formData.category,
       sequence,
       date: formData.date,
+      status: formData.status,
       total_items: totalItems,
       subject_id: String(formData.subject_id),
       ...(formData.class_sections !== null ? { class_sections: formData.class_sections } : {}),
@@ -428,10 +431,12 @@ export default function AssessmentForm({
         ? await axios.put(
             `${API_URL}/assessments/${resolvedAssessmentId}`,
             payload,
+            schoolYearRequest(schoolYearId),
           )
         : await axios.post(
             `${API_URL}/assessments`,
             payload,
+            schoolYearRequest(schoolYearId),
           );
 
       if (typeof onSaved === "function") {
@@ -582,7 +587,7 @@ export default function AssessmentForm({
                     required
                   >
                     <option value="">Select a term</option>
-                    {TERM_OPTIONS.map((term) => (
+                    {TERM_NUMBERS.map((term) => (
                       <option key={term} value={term}>Term {term}</option>
                     ))}
                   </select>
@@ -648,6 +653,13 @@ export default function AssessmentForm({
                     className="w-full rounded-[13px] border border-[var(--ed-color-d8e1e7)] bg-[var(--ed-surface)] px-4 py-3 text-[var(--ed-color-25313c)] outline-none focus:border-[var(--ed-primary)] focus:ring-4 focus:ring-[var(--ed-primary)]/10"
                     required
                   />
+                </div>
+
+                <div>
+                  <FormLabel htmlFor="assessment-status" label="Status" />
+                  <AssessmentStatusSelect id="assessment-status" label="Assessment status" status={formData.status} date={formData.date}
+                    onChange={(status) => setFormData((current) => ({ ...current, status }))} disabled={saving} />
+                  <p className="mt-2 text-xs text-[var(--ed-muted)]">Scheduled assessments appear at sign-in.</p>
                 </div>
 
                 <div>
