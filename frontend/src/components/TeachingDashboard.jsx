@@ -209,7 +209,7 @@ export default function TeachingDashboard({
           folders={[
             { id: "dashboard", label: "Dashboard", content: (
               <>
-                <SummaryCards classes={classes} selectedClass={selectedClass} passingGrade={rules.passingGrade} />
+                <SummaryCards classes={classes} passingGrade={rules.passingGrade} />
                 <div className={`space-y-2 ${muted}`}>
                   <p>
                     Subject-term results use EduLITE’s grading rules and component weights.
@@ -381,28 +381,28 @@ function GradeValue({ value, basis }) {
   </span>;
 }
 
-function SummaryCards({ classes, selectedClass, passingGrade }) {
-  const totals = summarizeOverview(classes);
-  let metrics = [
-    ["Grade Levels Handled", totals.gradeLevels, "Within the selected assignments"],
-    ["Sections Handled", totals.sections, "Distinct sections within each grade level"],
-    ["Unique Students Handled", totals.students, "Enrolled students counted once across subjects"],
-    ["Students Below Threshold", totals.below, `Unique students below ${passingGrade} in at least one selected subject`],
+function SummaryCards({ classes, passingGrade }) {
+  const { average, assessedCount, enrolledCount, passingCount, passingRate, belowCount, interventionCount, topSubjects } =
+    summarizeOverview(classes, passingGrade);
+  const metrics = [
+    ["Class Average", metric(average), assessedCount
+      ? `This average uses term results from ${assessedCount} of ${enrolledCount} enrolled ${enrolledCount === 1 ? "student" : "students"}.`
+      : "No term results have been recorded for the selected classes."],
+    ["Passing Rate", metric(passingRate, "%"), assessedCount
+      ? `Of the ${assessedCount} assessed ${assessedCount === 1 ? "student" : "students"}, ${passingCount} reached the passing grade of ${passingGrade}.`
+      : "Record term results to see how many students meet the passing grade."],
+    ["Needs Support", belowCount, assessedCount
+      ? `${belowCount} ${belowCount === 1 ? "student needs" : "students need"} support based on a term average below ${passingGrade}.`
+      : "Record term results to see which students need support."],
+    ["Most Students Needing Intervention", topSubjects.join(", ") || "—", topSubjects.length
+      ? `${interventionCount} ${interventionCount === 1 ? "student needs" : "students need"} intervention ${topSubjects.length === 1 ? "in this subject" : "in each of these subjects"}.`
+      : assessedCount ? `No students are below ${passingGrade} in the selected subjects.`
+        : "Record term results to find the subject with the most students needing intervention.", "text-2xl"],
   ];
-  if (selectedClass) {
-    const { average, assessed, students, below, passingCount, passingRate } = selectedClass;
-    const coverage = students.length ? assessed.length / students.length * 100 : null;
-    metrics = [
-      ["Average Performance", metric(average), `Mean of assessed students’ subject averages · ${basisLabel(selectedClass)}`],
-      ["Passing Rate", metric(passingRate, "%"), `${passingCount} of ${assessed.length} assessed students meet the threshold of ${passingGrade}`],
-      ["Assessed / Enrolled Students", `${assessed.length} / ${students.length}`, `${metric(coverage, "%")} assessed · ${students.length - assessed.length} without a recorded average`],
-      ["Students Below Threshold", below.length, `Recorded subject average below ${passingGrade}`],
-    ];
-  }
   return <section aria-label="Performance summary" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-    {metrics.map(([label, value, description]) => <div key={label} className={card}>
+    {metrics.map(([label, value, description, size = "text-4xl"]) => <div key={label} className={card}>
       <h3 className="font-semibold text-[var(--ed-text)]">{label}</h3>
-      <p className="my-1 text-4xl font-extrabold tabular-nums text-[var(--ed-primary)]">{value}</p>
+      <p className={`my-1 break-words font-extrabold tabular-nums text-[var(--ed-primary)] ${size}`}>{value}</p>
       <p className={muted}>{description}</p>
     </div>)}
   </section>;

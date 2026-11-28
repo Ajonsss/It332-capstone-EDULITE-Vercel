@@ -70,12 +70,41 @@ export function summarizeAssignment(assignment, summaries, term, passingGrade) {
   };
 }
 
-export function summarizeOverview(classes) {
+export function summarizeOverview(classes, passingGrade) {
+  const gradesByStudent = new Map();
+  const interventionBySubject = new Map();
+  for (const { subjectId, subjectName, assessed, below } of classes) {
+    for (const { student, grade } of assessed) {
+      if (!gradesByStudent.has(student.id)) gradesByStudent.set(student.id, new Map());
+      gradesByStudent.get(student.id).set(subjectId, grade);
+    }
+    if (below.length === 0) continue;
+    if (!interventionBySubject.has(subjectId)) {
+      interventionBySubject.set(subjectId, { subjectName, students: new Set() });
+    }
+    const { students } = interventionBySubject.get(subjectId);
+    for (const { student } of below) students.add(student.id);
+  }
+
+  // Students contribute one average each, even when they take different numbers of subjects.
+  const studentAverages = [...gradesByStudent.values()].map((grades) => mean([...grades.values()]));
+  const assessedCount = studentAverages.length;
+  const passingCount = studentAverages.filter((grade) => grade >= passingGrade).length;
+  const subjectCounts = [...interventionBySubject.values()].map(({ subjectName, students }) => ({
+    subjectName, count: students.size,
+  }));
+  const interventionCount = Math.max(0, ...subjectCounts.map(({ count }) => count));
+
   return {
-    gradeLevels: new Set(classes.map((item) => item.grade)).size,
-    sections: new Set(classes.map((item) => item.sectionKey)).size,
-    students: new Set(classes.flatMap((item) => item.students.map((student) => student.id))).size,
-    below: new Set(classes.flatMap((item) => item.below.map(({ student }) => student.id))).size,
+    average: mean(studentAverages),
+    assessedCount,
+    enrolledCount: new Set(classes.flatMap(({ students }) => students.map(({ id }) => id))).size,
+    passingCount,
+    passingRate: assessedCount ? passingCount / assessedCount * 100 : null,
+    belowCount: assessedCount - passingCount,
+    interventionCount,
+    topSubjects: subjectCounts.filter(({ count }) => count === interventionCount).map(({ subjectName }) => subjectName)
+      .sort((first, second) => first.localeCompare(second)),
   };
 }
 

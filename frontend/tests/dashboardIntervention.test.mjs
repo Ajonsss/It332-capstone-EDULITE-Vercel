@@ -101,8 +101,19 @@ test("dashboard keeps reporting filters, assessment actions, and generated suppo
   await React.act(async () => root.render(React.createElement(MemoryRouter, null, React.createElement(Dashboard))));
   assert.deepEqual(reads, ["/api/dashboard"], "initial dashboard data arrives in one request");
   assert.equal(document.querySelector('[aria-label="Main navigation"] [aria-label="Interventions"]'), null);
-  const metric = (label) => [...document.querySelectorAll("h3")].find((element) => element.textContent === label).parentElement.textContent;
-  assert.match(metric("Unique Students Handled"), /Unique Students Handled2/);
+  const summary = document.querySelector('[aria-label="Performance summary"]');
+  const metric = (label) => {
+    const card = [...document.querySelectorAll('[aria-label="Performance summary"] h3')]
+      .find((heading) => heading.textContent === label).parentElement;
+    return [...card.querySelectorAll("p")].map((paragraph) => paragraph.textContent);
+  };
+  assert.deepEqual([...summary.querySelectorAll("h3")].map((heading) => heading.textContent), [
+    "Class Average", "Passing Rate", "Needs Support", "Most Students Needing Intervention",
+  ]);
+  assert.deepEqual(metric("Class Average"), ["32.0", "This average uses term results from 1 of 2 enrolled students."]);
+  assert.deepEqual(metric("Passing Rate"), ["0.0%", "Of the 1 assessed student, 0 reached the passing grade of 75."]);
+  assert.deepEqual(metric("Needs Support"), ["1", "1 student needs support based on a term average below 75."]);
+  assert.deepEqual(metric("Most Students Needing Intervention"), ["Math, Science", "1 student needs intervention in each of these subjects."]);
   const chooseClass = (grade = 7) => React.act(async () => document.querySelector(`[aria-label="View Grade ${grade} · Section Rose · Math"]`).click());
   const folderTab = (name) => [...document.querySelectorAll('[aria-label="Dashboard reports"] [role="tab"]')]
     .find((tab) => tab.textContent === name);
@@ -219,11 +230,14 @@ test("dashboard keeps reporting filters, assessment actions, and generated suppo
   await selectFolder("Dashboard");
   assertVisibleFolder("Dashboard");
   assert.equal(getFilter("Term").value, "2", "opening a class keeps the term");
-  assert.match(metric("Passing Rate"), /Passing Rate—/);
-  assert.match(metric("Assessed / Enrolled Students"), /0 \/ 2/);
+  assert.deepEqual(metric("Class Average"), ["—", "No term results have been recorded for the selected classes."]);
+  assert.deepEqual(metric("Passing Rate"), ["—", "Record term results to see how many students meet the passing grade."]);
+  assert.deepEqual(metric("Needs Support"), ["0", "Record term results to see which students need support."]);
+  assert.deepEqual(metric("Most Students Needing Intervention"), ["—", "Record term results to find the subject with the most students needing intervention."]);
   assert.equal(donut().style.background, "var(--ed-border)");
   assert.match(distribution().textContent, /No recorded averages/);
   await changeFilter("Term", "3");
+  assert.equal(metric("Passing Rate")[0], "50.0%");
   assert.match(donut().style.background, /^conic-gradient\(.+ 0% 50%, .+ 50% 100%\)$/);
   assert.match(distribution().textContent, /Advancing90 and above1 · 50\.0%/);
   assert.match(distribution().textContent, /EmergingBelow 651 · 50\.0%/);
@@ -278,8 +292,9 @@ test("dashboard keeps reporting filters, assessment actions, and generated suppo
   await chooseClass();
   assert.match(document.querySelector('[aria-label="Dashboard filters"]').textContent, /Grade 7 · Section Rose · Math · Term 1/);
   assert.match(document.querySelector('[aria-label="Learning Support"]').textContent, /Maria SantosGrade 7 · Section RoseMath64.0In progressNeeds intervention/);
-  assert.match(metric("Assessed / Enrolled Students"), /1 \/ 2/);
-  assert.match(metric("Students Below Threshold"), /Students Below Threshold1/);
+  assert.deepEqual(metric("Class Average"), ["64.0", "This average uses term results from 1 of 2 enrolled students."]);
+  assert.equal(metric("Needs Support")[0], "1");
+  assert.deepEqual(metric("Most Students Needing Intervention"), ["Math", "1 student needs intervention in this subject."]);
   await selectFolder("Student List");
   const search = document.querySelector('[aria-label="Search students in selected class"]');
   await React.act(async () => {
@@ -288,7 +303,7 @@ test("dashboard keeps reporting filters, assessment actions, and generated suppo
     search.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
   assert.equal(document.querySelector('[aria-label="View profile for No Scores"]'), null);
-  assert.match(metric("Assessed / Enrolled Students"), /1 \/ 2/, "search only narrows the roster");
+  assert.deepEqual(metric("Class Average"), ["64.0", "This average uses term results from 1 of 2 enrolled students."], "search only narrows the roster");
   await React.act(async () => document.querySelector('[aria-label="View profile for Maria Santos"]').click());
   assert.match(document.querySelector('[aria-label="Dashboard details"]').textContent, /Maria SantosGrade 7 · Section Rose.*Subject & Term Results.*Complete Record.*Saved Recommendations/);
   const back = [...document.querySelectorAll("button")].find((element) => element.textContent === "Back to dashboard");

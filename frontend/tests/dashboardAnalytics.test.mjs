@@ -29,10 +29,13 @@ const summaries = indexGradeSummaries([
   { student_id: "Cora", subject_id: "math", term1: { termGrade: 90 } },
 ]);
 
-test("overview counts distinct enrollments and intervention flags across authorized subjects", () => {
+test("overview averages students equally and reports tied subjects with intervention needs", () => {
   assert.deepEqual(assignments.map((item) => item.id), ["7:lily:math", "7:rose:math", "7:rose:science", "8:rose:math"]);
   const classes = assignments.map((item) => summarizeAssignment(item, summaries, 1, 80));
-  assert.deepEqual(summarizeOverview(classes), { gradeLevels: 2, sections: 3, students: 3, below: 1 });
+  assert.deepEqual(summarizeOverview(classes, 80), {
+    average: (37.25 + 96 + 90) / 3, assessedCount: 3, enrolledCount: 3, passingCount: 2, passingRate: 2 / 3 * 100,
+    belowCount: 1, interventionCount: 1, topSubjects: ["Math", "Science"],
+  });
   assert.deepEqual(
     listLearningSupport(classes, { passingGrade: 80, highPerformingGrade: 94 })
       .map(({ student, assignment, supportType }) => [student.id, assignment.subjectId, supportType]),
@@ -42,8 +45,33 @@ test("overview counts distinct enrollments and intervention flags across authori
   assert.equal(empty.students.length, 0);
   assert.equal(empty.average, null);
   assert.equal(empty.passingRate, null);
-  assert.deepEqual(summarizeOverview(assignments.map((item) => summarizeAssignment(item, summaries, 2, 80))),
-    { gradeLevels: 2, sections: 3, students: 3, below: 0 });
+  assert.deepEqual(summarizeOverview(assignments.map((item) => summarizeAssignment(item, summaries, 2, 80)), 80), {
+    average: null, assessedCount: 0, enrolledCount: 3, passingCount: 0, passingRate: null,
+    belowCount: 0, interventionCount: 0, topSubjects: [],
+  });
+});
+
+test("the leading subject counts distinct intervention students across classes", () => {
+  const grades = indexGradeSummaries([
+    { student_id: "Ana", subject_id: "math", term1: { termGrade: 60 } },
+    { student_id: "Ana", subject_id: "science", term1: { termGrade: 85 } },
+    { student_id: "Ben", subject_id: "math", term1: { termGrade: 86 } },
+    { student_id: "Ben", subject_id: "science", term1: { termGrade: 74 } },
+    { student_id: "Cora", subject_id: "math", term1: { termGrade: 75 } },
+  ]);
+  const classes = [...assignments, math].map((item) => summarizeAssignment(item, grades, 1, 80));
+  const overview = summarizeOverview(classes, 80);
+  assert.equal(overview.passingCount, 1, "a student at the threshold passes even with a lower result in one subject");
+  assert.equal(overview.belowCount, 2);
+  assert.equal(overview.interventionCount, 2);
+  assert.deepEqual(overview.topSubjects, ["Math"]);
+
+  const passingOnly = summarizeOverview(
+    assignments.map((item) => summarizeAssignment(item, grades, 1, 60)), 60,
+  );
+  assert.equal(passingOnly.passingRate, 100);
+  assert.equal(passingOnly.interventionCount, 0);
+  assert.deepEqual(passingOnly.topSubjects, []);
 });
 
 test("sections use grade and section IDs and filters keep only valid downstream selections", () => {
